@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gold: #d4af37;
+  --gold-dim: #b8860b;
+  --bg: #fafafa;
+  --fg: #0a0a0a;
+  --card: #ffffff;
+  --muted: #6d6d6d;
+  --border: rgba(10, 10, 10, 0.08);
+}
+
+.dark {
+  --bg: #050505;
+  --fg: #f6f6f6;
+  --card: #0f0f0f;
+  --muted: #a3a3a3;
+  --border: rgba(255, 255, 255, 0.08);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-[var(--bg)] text-[var(--fg)] antialiased;
+}
+
+@layer utilities {
+  .text-gradient-gold {
+    @apply bg-gradient-to-r from-gold-400 via-gold-500 to-gold-600 bg-clip-text text-transparent;
+  }
+}
