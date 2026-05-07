@@ -3,11 +3,14 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
+import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import type { Appointment } from "@/lib/types";
 
 export async function addAvailability(formData: FormData) {
   const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
   const dia_semana = Number(formData.get("dia_semana"));
   const hora_inicio = String(formData.get("hora_inicio"));
   const hora_fim = String(formData.get("hora_fim"));
@@ -32,6 +35,8 @@ export async function addAvailability(formData: FormData) {
 
 export async function deleteAvailability(id: string) {
   const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
   const supabase = await createClient();
   const { error } = await supabase
     .from("availability")
@@ -47,6 +52,8 @@ export async function deleteAvailability(id: string) {
 
 export async function cancelAppointment(id: string) {
   const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
   const supabase = await createClient();
   const { error } = await supabase
     .from("appointments")

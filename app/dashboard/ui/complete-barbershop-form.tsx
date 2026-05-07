@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { saveBarbershopForCurrentUser } from "@/app/actions/barbershop";
+import { DevicePayloadField } from "@/components/device-payload-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -24,12 +25,29 @@ export function CompleteBarbershopForm() {
           toast.error(r.error);
           return;
         }
+        if (r.trialEligible === false) {
+          toast.warning(
+            "Não foi possível liberar novo teste gratuito com estes dados. Assine para continuar."
+          );
+          router.push("/assinatura?trial_denied=1");
+          router.refresh();
+          return;
+        }
         toast.success("Barbearia cadastrada!");
+        router.push("/dashboard");
         router.refresh();
       }}
     >
       <Input name="nome_barbearia" label="Nome da barbearia" required />
       <Input name="endereco" label="Endereço" />
+      <Input
+        name="cpf"
+        label="CPF (antifraude trial)"
+        required
+        autoComplete="off"
+        inputMode="numeric"
+      />
+      <DevicePayloadField />
       <Button type="submit" className="w-full sm:w-auto" disabled={loading}>
         {loading ? "Salvando…" : "Salvar barbearia"}
       </Button>

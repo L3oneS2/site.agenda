@@ -1,4 +1,4 @@
-import { requireActiveSubscription, requireBarber } from "@/lib/auth";
+import { requireBarber, requireBarberAgendaAccess } from "@/lib/auth";
 
 export default async function AgendaLayout({
   children,
@@ -6,6 +6,6 @@ export default async function AgendaLayout({
   children: React.ReactNode;
 }) {
   await requireBarber();
-  await requireActiveSubscription();
+  await requireBarberAgendaAccess();
   return <>{children}</>;
 }

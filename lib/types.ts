@@ -1,6 +1,6 @@
 export type ProfileRole = "barber" | "client";
 
-export type SubscriptionStatus = "active" | "expired" | "canceled";
+export type SubscriptionStatus = "trial" | "active" | "expired" | "canceled";
 
 export type AppointmentStatus = "scheduled" | "canceled";
 
@@ -8,6 +8,7 @@ export interface Profile {
   id: string;
   nome: string;
   telefone: string;
+  cpf: string;
   role: ProfileRole;
   created_at: string;
   updated_at: string;
@@ -29,6 +30,9 @@ export interface Subscription {
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   current_period_end: string | null;
+  trial_start_date: string | null;
+  trial_end_date: string | null;
+  account_blocked: boolean;
   created_at: string;
   updated_at: string;
 }

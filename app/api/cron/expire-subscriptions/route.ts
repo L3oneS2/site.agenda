@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
+import { utcTodayYmd } from "@/lib/subscription-access";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 
 export const runtime = "nodejs";
 
+/** Expira períodos Stripe (fim do período) e trials UTC por data civil. */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
@@ -18,16 +20,35 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
-  const now = new Date().toISOString();
+  const nowIso = new Date().toISOString();
+  const today = utcTodayYmd();
 
-  const { error } = await admin
+  const { error: stripeErr } = await admin
     .from("subscriptions")
-    .update({ status: "expired", updated_at: now })
+    .update({
+      status: "expired",
+      account_blocked: true,
+      updated_at: nowIso,
+    })
     .eq("status", "active")
-    .lt("current_period_end", now);
+    .lt("current_period_end", nowIso);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (stripeErr) {
+    return NextResponse.json({ error: stripeErr.message }, { status: 500 });
+  }
+
+  const { error: trialErr } = await admin
+    .from("subscriptions")
+    .update({
+      status: "expired",
+      account_blocked: true,
+      updated_at: nowIso,
+    })
+    .eq("status", "trial")
+    .lt("trial_end_date", today);
+
+  if (trialErr) {
+    return NextResponse.json({ error: trialErr.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

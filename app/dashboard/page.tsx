@@ -2,11 +2,28 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { tryCreateClient } from "@/lib/supabase/server";
 import { getSubscription, isSubscriptionActive } from "@/lib/auth";
+import {
+  subscriptionAllowsFullAccess,
+  trialCalendarDaysRemainingUtc,
+} from "@/lib/subscription-access";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { TrialReminderBanner } from "@/components/trial-reminder-banner";
 import { CompleteBarbershopForm } from "@/app/dashboard/ui/complete-barbershop-form";
 import { ServicesManager } from "@/app/dashboard/ui/services-manager";
-import type { Appointment, Barbershop, Service } from "@/lib/types";
+import type { Appointment, Barbershop, Service, Subscription } from "@/lib/types";
+
+function subscriptionStatusLabel(sub: Subscription | null): string {
+  if (!sub) return "Configurando…";
+  if (isSubscriptionActive(sub)) return "Assinatura Stripe ativa";
+  if (subscriptionAllowsFullAccess(sub) && sub.status === "trial") {
+    const days = trialCalendarDaysRemainingUtc(sub.trial_end_date ?? null);
+    const d = days === null ? "" : ` · ${days} dia${days === 1 ? "" : "s"} restantes`;
+    return `Período de teste${d}`;
+  }
+  if (sub.account_blocked) return "Bloqueado — assine para continuar";
+  return "Inativo";
+}
 
 function mapServiceRow(r: Record<string, unknown>): Service {
   return {
@@ -68,9 +85,9 @@ export default async function DashboardPage() {
         <div>
           <h1 className="font-display text-4xl font-bold">Painel</h1>
           <p className="mt-2 text-[var(--muted)]">
-            Assinatura:{" "}
+            Plano:{" "}
             <span className="font-medium text-gold-600">
-              {isSubscriptionActive(sub) ? "Ativa" : "Inativa"}
+              {subscriptionStatusLabel(sub)}
             </span>
           </p>
         </div>
@@ -84,6 +101,10 @@ export default async function DashboardPage() {
             </Link>
           ) : null}
         </div>
+      </div>
+
+      <div className="mt-6">
+        <TrialReminderBanner />
       </div>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-2">

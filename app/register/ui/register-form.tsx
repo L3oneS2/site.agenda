@@ -4,7 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabaseClient";
+import { finalizeBarberBootstrap } from "@/app/actions/bootstrap-barber";
 import { logAuthError, logSupabasePublicEnvDebug } from "@/lib/supabase/debug-env";
+import { DevicePayloadField } from "@/components/device-payload-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -72,23 +74,30 @@ export function RegisterForm() {
       });
 
       if (data.session && data.user) {
-        const { error: shopError } = await supabase.from("barbershops").insert({
-          user_id: data.user.id,
-          nome_barbearia,
-          endereco,
-        });
-
-        if (shopError) {
-          logAuthError("register:barbershop-insert", shopError);
-          setLoading(false);
-          toast.error(shopError.message);
+        const r = await finalizeBarberBootstrap(new FormData(form));
+        setLoading(false);
+        if (!r.ok) {
+          logAuthError("register:bootstrap", new Error(r.error ?? "bootstrap"));
+          toast.error(r.error ?? "Falha ao finalizar cadastro.");
           return;
         }
-
-        toast.success("Conta criada! Redirecionando…");
-        router.push("/assinatura");
+        if (r.alreadyInitialized) {
+          toast.success("Conta pronta!");
+          router.push("/dashboard");
+          router.refresh();
+          return;
+        }
+        if (r.trialEligible === false) {
+          toast.warning(
+            "Este CPF, telefone ou e-mail já utilizou o período gratuito. Assine para continuar."
+          );
+          router.push("/assinatura?trial_denied=1");
+          router.refresh();
+          return;
+        }
+        toast.success("Conta criada! Seu teste de 14 dias começou.");
+        router.push("/dashboard");
         router.refresh();
-        setLoading(false);
         return;
       }
 
@@ -117,6 +126,13 @@ export function RegisterForm() {
         required
         autoComplete="tel"
       />
+      <Input
+        name="cpf"
+        label="CPF (antifraude trial)"
+        required
+        autoComplete="off"
+        inputMode="numeric"
+      />
       <Input name="nome_barbearia" label="Nome da barbearia" required />
       <Input name="endereco" label="Endereço" />
       <Input name="email" type="email" label="E-mail" required autoComplete="email" />
@@ -128,6 +144,7 @@ export function RegisterForm() {
         autoComplete="new-password"
         minLength={6}
       />
+      <DevicePayloadField />
       <Button type="submit" className="w-full !py-3" disabled={loading}>
         {loading ? "Criando…" : "Criar conta"}
       </Button>

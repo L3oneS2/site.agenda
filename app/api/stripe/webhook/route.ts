@@ -11,42 +11,54 @@ async function syncSubscriptionFromStripe(
 ) {
   const admin = createAdminClient();
   const userId =
-    stripeSub.metadata?.supabase_user_id ??
-    fallbackUserId ??
-    null;
+    stripeSub.metadata?.supabase_user_id ?? fallbackUserId ?? null;
 
   if (!userId) {
     console.error("Stripe subscription sem supabase_user_id", stripeSub.id);
     return;
   }
 
+  const { data: existing } = await admin
+    .from("subscriptions")
+    .select("trial_start_date,trial_end_date")
+    .eq("user_id", userId)
+    .maybeSingle();
+
   const end = stripeSub.current_period_end
     ? new Date(stripeSub.current_period_end * 1000).toISOString()
     : null;
 
-  let status: "active" | "expired" | "canceled" = "active";
-  if (
+  const paidOk =
+    stripeSub.status === "active" || stripeSub.status === "trialing";
+
+  let status: "trial" | "active" | "expired" | "canceled";
+  if (paidOk) {
+    status = "active";
+  } else if (
     stripeSub.status === "canceled" ||
     stripeSub.status === "unpaid" ||
     stripeSub.status === "incomplete_expired"
   ) {
     status = "canceled";
-  } else if (
-    stripeSub.status === "past_due" ||
-    stripeSub.status === "incomplete"
-  ) {
+  } else {
     status = "expired";
-  } else if (
-    stripeSub.status === "active" ||
-    stripeSub.status === "trialing"
-  ) {
-    status = "active";
   }
 
   const customerId =
     typeof stripeSub.customer === "string"
       ? stripeSub.customer
       : stripeSub.customer?.id;
+
+  const account_blocked = !paidOk;
+
+  const trial_start_date =
+    existing && "trial_start_date" in existing
+      ? (existing as { trial_start_date: string | null }).trial_start_date
+      : null;
+  const trial_end_date =
+    existing && "trial_end_date" in existing
+      ? (existing as { trial_end_date: string | null }).trial_end_date
+      : null;
 
   const { error } = await admin.from("subscriptions").upsert(
     {
@@ -55,6 +67,9 @@ async function syncSubscriptionFromStripe(
       stripe_subscription_id: stripeSub.id,
       status,
       current_period_end: end,
+      trial_start_date,
+      trial_end_date,
+      account_blocked,
     },
     { onConflict: "user_id" }
   );
@@ -122,6 +137,7 @@ export async function POST(request: Request) {
           .from("subscriptions")
           .update({
             status: "expired",
+            account_blocked: true,
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subId);
@@ -134,6 +150,7 @@ export async function POST(request: Request) {
           .from("subscriptions")
           .update({
             status: "canceled",
+            account_blocked: true,
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", stripeSub.id);

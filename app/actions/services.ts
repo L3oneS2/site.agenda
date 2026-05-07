@@ -3,9 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
+import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 
 export async function createService(formData: FormData) {
   const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
   const nome = String(formData.get("nome") ?? "").trim();
   const preco = Number(formData.get("preco"));
   const duracao_minutos = Number(formData.get("duracao_minutos"));
@@ -33,6 +36,8 @@ export async function createService(formData: FormData) {
 
 export async function updateService(formData: FormData) {
   const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
   const id = String(formData.get("id") ?? "");
   const nome = String(formData.get("nome") ?? "").trim();
   const preco = Number(formData.get("preco"));
@@ -61,6 +66,8 @@ export async function updateService(formData: FormData) {
 
 export async function deleteService(id: string) {
   const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
   const supabase = await createClient();
   const { error } = await supabase
     .from("services")

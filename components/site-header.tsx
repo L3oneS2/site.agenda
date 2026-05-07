@@ -31,6 +31,12 @@ export function SiteHeader({
           {userEmail ? (
             <>
               <Link
+                href="/suporte"
+                className="hidden text-sm text-[var(--muted)] hover:text-gold-500 sm:inline"
+              >
+                Suporte
+              </Link>
+              <Link
                 href="/dashboard"
                 className="hidden text-sm text-[var(--muted)] hover:text-gold-500 sm:inline"
               >

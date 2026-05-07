@@ -1,4 +1,4 @@
-import { requireActiveSubscription, requireBarber } from "@/lib/auth";
+import { requireBarber, requireBarberDashboardAccess } from "@/lib/auth";
 
 export default async function DashboardLayout({
   children,
@@ -6,6 +6,6 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   await requireBarber();
-  await requireActiveSubscription();
+  await requireBarberDashboardAccess();
   return <>{children}</>;
 }

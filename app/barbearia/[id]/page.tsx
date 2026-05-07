@@ -39,8 +39,12 @@ export default async function BarbeariaPublicPage({
     // Diagnóstico: pode ser inexistente OU bloqueado pela policy pública (assinatura).
     // Usamos service_role (server-only) para diferenciar os casos e facilitar o teste.
     let exists: Barbershop | null = null;
-    let sub: { status: string | null; current_period_end: string | null } | null =
-      null;
+    let sub: {
+      status: string | null;
+      current_period_end: string | null;
+      trial_end_date: string | null;
+      account_blocked: boolean | null;
+    } | null = null;
     try {
       const admin = createAdminClient();
       const { data: rawShop } = await admin
@@ -53,12 +57,16 @@ export default async function BarbeariaPublicPage({
       if (exists?.user_id) {
         const { data: rawSub } = await admin
           .from("subscriptions")
-          .select("status, current_period_end")
+          .select("status, current_period_end, trial_end_date, account_blocked")
           .eq("user_id", exists.user_id)
           .maybeSingle();
         sub =
-          (rawSub as { status: string | null; current_period_end: string | null } | null) ??
-          null;
+          (rawSub as {
+            status: string | null;
+            current_period_end: string | null;
+            trial_end_date: string | null;
+            account_blocked: boolean | null;
+          } | null) ?? null;
       }
     } catch {
       // se não houver service_role key, mantemos mensagem genérica
@@ -126,6 +134,14 @@ export default async function BarbeariaPublicPage({
               <p className="mt-1">
                 - **subscriptions.current_period_end**:{" "}
                 <code>{sub?.current_period_end ?? "null"}</code>
+              </p>
+              <p className="mt-1">
+                - **subscriptions.trial_end_date**:{" "}
+                <code>{sub?.trial_end_date ?? "null"}</code>
+              </p>
+              <p className="mt-1">
+                - **subscriptions.account_blocked**:{" "}
+                <code>{sub?.account_blocked != null ? String(sub.account_blocked) : "null"}</code>
               </p>
               <p className="mt-2">
                 Para liberar via banco: garanta uma linha em `subscriptions`
