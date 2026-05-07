@@ -16,7 +16,7 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
     e.preventDefault();
     setLoading(true);
     const form = new FormData(e.currentTarget);
-    const email = String(form.get("email") ?? "");
+    const email = String(form.get("email") ?? "").trim();
     const password = String(form.get("password") ?? "");
 
     logSupabasePublicEnvDebug("login:before-signIn");
