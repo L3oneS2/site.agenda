@@ -74,33 +74,6 @@ export default function HomePage() {
           </p>
           <ClientQuickAccess />
         </section>
-
-        <div className="mt-20 grid gap-6 sm:grid-cols-3">
-          {[
-            {
-              title: "Assinatura Stripe",
-              body: "Checkout seguro, webhooks validados e bloqueio do painel sem plano ativo.",
-            },
-            {
-              title: "Agenda inteligente",
-              body: "Defina faixas por dia da semana e veja apenas horários livres em tempo real.",
-            },
-            {
-              title: "Cliente sem login",
-              body: "Link público da barbearia: escolha data, horário e pronto.",
-            },
-          ].map((item) => (
-            <Card
-              key={item.title}
-              className="animate-fade-in hover:-translate-y-0.5"
-            >
-              <h3 className="font-display text-xl font-semibold text-[var(--fg)]">
-                {item.title}
-              </h3>
-              <p className="mt-2 text-sm text-[var(--muted)]">{item.body}</p>
-            </Card>
-          ))}
-        </div>
       </section>
     </div>
   );
