@@ -244,6 +244,18 @@ CREATE POLICY "subscriptions_select_own"
   TO authenticated
   USING (user_id = auth.uid());
 
+-- subscriptions: leitura pública APENAS para linhas ativas
+-- Necessário porque outras policies (barbershops/services/availability) usam EXISTS(subscriptions)
+-- e o RLS de subscriptions bloqueia o subselect para anon se não houver policy de SELECT.
+DROP POLICY IF EXISTS "subscriptions_select_public_active" ON public.subscriptions;
+CREATE POLICY "subscriptions_select_public_active"
+  ON public.subscriptions FOR SELECT
+  TO anon, authenticated
+  USING (
+    status = 'active'
+    AND (current_period_end IS NULL OR current_period_end > now())
+  );
+
 -- availability: dono sempre lê; público só barbeiros com assinatura ativa
 DROP POLICY IF EXISTS "availability_select_own" ON public.availability;
 CREATE POLICY "availability_select_own"

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { tryCreateClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabaseAdmin";
 import { Card } from "@/components/ui/card";
 import { PublicBarbershop } from "./ui/public-barbershop";
 import type { Barbershop, Service } from "@/lib/types";
@@ -25,13 +27,135 @@ export default async function BarbeariaPublicPage({
   const supabase = await tryCreateClient();
   if (!supabase) notFound();
 
-  const { data: shop, error } = await supabase
+  const bypass = process.env.PUBLIC_BYPASS_SUBSCRIPTION === "1";
+
+  const { data: shop } = await supabase
     .from("barbershops")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
-  if (error || !shop) notFound();
+  if (!shop) {
+    // Diagnóstico: pode ser inexistente OU bloqueado pela policy pública (assinatura).
+    // Usamos service_role (server-only) para diferenciar os casos e facilitar o teste.
+    let exists: Barbershop | null = null;
+    let sub: { status: string | null; current_period_end: string | null } | null =
+      null;
+    try {
+      const admin = createAdminClient();
+      const { data: rawShop } = await admin
+        .from("barbershops")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      exists = (rawShop as Barbershop | null) ?? null;
+
+      if (exists?.user_id) {
+        const { data: rawSub } = await admin
+          .from("subscriptions")
+          .select("status, current_period_end")
+          .eq("user_id", exists.user_id)
+          .maybeSingle();
+        sub =
+          (rawSub as { status: string | null; current_period_end: string | null } | null) ??
+          null;
+      }
+    } catch {
+      // se não houver service_role key, mantemos mensagem genérica
+    }
+
+    if (bypass && exists) {
+      const admin = createAdminClient();
+      const { data: rawServices } = await admin
+        .from("services")
+        .select("*")
+        .eq("user_id", exists.user_id)
+        .order("nome");
+
+      const services = (rawServices ?? []).map((row) =>
+        mapServiceRow(row as Record<string, unknown>)
+      );
+
+      return (
+        <div className="mx-auto max-w-3xl px-4 py-16">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-600">
+              Modo teste
+            </p>
+            <h1 className="mt-3 font-display text-4xl font-bold">
+              {exists.nome_barbearia}
+            </h1>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Acesso liberado com `PUBLIC_BYPASS_SUBSCRIPTION=1`.
+            </p>
+          </div>
+          <Card className="mt-10">
+            <PublicBarbershop barbershop={exists} services={services} />
+          </Card>
+        </div>
+      );
+    }
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-16">
+        <Card>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-600">
+            Página indisponível
+          </p>
+          <h1 className="mt-3 font-display text-3xl font-bold">
+            {exists ? "Assinatura inativa" : "Barbearia não encontrada"}
+          </h1>
+          <p className="mt-3 text-sm text-[var(--muted)]">
+            {exists
+              ? "A barbearia existe, mas está bloqueada para o público pela assinatura. Ative o status no Supabase para liberar imediatamente (sem depender da Stripe por enquanto)."
+              : "Confira se o link/código (UUID) foi copiado corretamente."}
+          </p>
+          {exists ? (
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-black/[0.02] px-4 py-3 text-xs text-[var(--muted)] dark:bg-white/[0.03]">
+              <p className="font-medium text-[var(--fg)]">Diagnóstico</p>
+              <p className="mt-1">
+                - **barbershops.id**: <code>{exists.id}</code>
+              </p>
+              <p className="mt-1">
+                - **barbershops.user_id**: <code>{exists.user_id}</code>
+              </p>
+              <p className="mt-1">
+                - **subscriptions.status**:{" "}
+                <code>{sub?.status ?? "null (sem linha)"}</code>
+              </p>
+              <p className="mt-1">
+                - **subscriptions.current_period_end**:{" "}
+                <code>{sub?.current_period_end ?? "null"}</code>
+              </p>
+              <p className="mt-2">
+                Para liberar via banco: garanta uma linha em `subscriptions`
+                com `user_id = barbershops.user_id` e `status = &apos;active&apos;`.
+              </p>
+              <p className="mt-2">
+                (Opcional dev) Defina{" "}
+                <code>PUBLIC_BYPASS_SUBSCRIPTION=1</code> no `.env.local` e
+                reinicie o `npm run dev`.
+              </p>
+            </div>
+          ) : null}
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/cliente"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-2.5 text-sm font-medium transition-all duration-200 hover:border-gold-500/50 hover:shadow-soft"
+            >
+              Voltar para /cliente
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gold-500 px-5 py-2.5 text-sm font-medium text-ink-950 shadow-gold transition-all duration-200 hover:bg-gold-400 hover:shadow-lg"
+            >
+              Ir para início
+            </Link>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const barbershop = shop as Barbershop;
 

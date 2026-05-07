@@ -51,6 +51,18 @@ ALTER TABLE public.appointments
 
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 
+-- subscriptions: liberar SELECT público para linhas ativas
+-- (senão as policies com EXISTS(subscriptions) sempre falham para anon)
+ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "subscriptions_select_public_active" ON public.subscriptions;
+CREATE POLICY "subscriptions_select_public_active"
+  ON public.subscriptions FOR SELECT
+  TO anon, authenticated
+  USING (
+    status = 'active'
+    AND (current_period_end IS NULL OR current_period_end > now())
+  );
+
 DROP POLICY IF EXISTS "services_select_own" ON public.services;
 CREATE POLICY "services_select_own"
   ON public.services FOR SELECT
