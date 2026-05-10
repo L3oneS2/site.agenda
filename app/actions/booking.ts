@@ -82,7 +82,7 @@ export async function getPublicSlots(
 
   const { data: blocks, error: avError } = await admin
     .from("availability")
-    .select("*")
+    .select("dia_semana, hora_inicio, hora_fim")
     .eq("user_id", barberId)
     .eq("dia_semana", dia);
 
@@ -127,18 +127,71 @@ export async function getDatesWithAvailability(
     return { error: "Horizonte de dias inválido." };
   }
 
-  const checks = Array.from({ length: horizonDays }, (_, i) =>
-    getPublicSlots(barbershopId, addDaysISO(fromISO, i), durationMinutes)
-  );
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    return { error: "Duração inválida." };
+  }
 
-  const results = await Promise.all(checks);
-  const firstErr = results.find((r) => r.error);
-  if (firstErr?.error) return { error: firstErr.error };
+  const admin = createAdminClient();
 
+  const { data: shop, error: shopError } = await admin
+    .from("barbershops")
+    .select("user_id")
+    .eq("id", barbershopId)
+    .single();
+
+  if (shopError || !shop) {
+    return { error: "Barbearia não encontrada." };
+  }
+
+  const barberId = shop.user_id as string;
+  const endISO = addDaysISO(fromISO, horizonDays - 1);
+
+  const [{ data: blocks, error: avError }, { data: appointments, error: apError }] =
+    await Promise.all([
+      admin
+        .from("availability")
+        .select("dia_semana, hora_inicio, hora_fim")
+        .eq("user_id", barberId),
+      admin
+        .from("appointments")
+        .select("data, hora_inicio, hora_fim")
+        .eq("barber_id", barberId)
+        .eq("status", "scheduled")
+        .gte("data", fromISO)
+        .lte("data", endISO),
+    ]);
+
+  if (avError) return { error: avError.message };
+  if (apError) return { error: apError.message };
+
+  const byDate = new Map<string, { hora_inicio: string; hora_fim: string }[]>();
+  for (const row of appointments ?? []) {
+    const d = String((row as { data: string }).data);
+    const list = byDate.get(d);
+    const slice = {
+      hora_inicio: String((row as { hora_inicio: string }).hora_inicio),
+      hora_fim: String((row as { hora_fim: string }).hora_fim),
+    };
+    if (list) list.push(slice);
+    else byDate.set(d, [slice]);
+  }
+
+  const allBlocks = (blocks ?? []) as Availability[];
   const dates: string[] = [];
-  for (let i = 0; i < results.length; i++) {
-    if ((results[i].slots ?? []).length > 0) {
-      dates.push(addDaysISO(fromISO, i));
+
+  for (let i = 0; i < horizonDays; i++) {
+    const date = addDaysISO(fromISO, i);
+    const dia = jsDayFromISODate(date);
+    const dayBlocks = allBlocks.filter((b) => b.dia_semana === dia);
+    const booked = byDate.get(date) ?? [];
+    const intervals = bookedRowsToIntervals(booked);
+    const slots = generateSlotStartsForDuration(
+      dayBlocks,
+      intervals,
+      durationMinutes
+    );
+    if (slots.length > 0) {
+      dates.push(date);
     }
   }
 
@@ -176,7 +229,7 @@ export async function bookPublicAppointment(formData: FormData) {
 
   const { data: serviceRow, error: svcErr } = await admin
     .from("services")
-    .select("*")
+    .select("duracao_minutos")
     .eq("id", servico_id)
     .eq("user_id", barberId)
     .maybeSingle();

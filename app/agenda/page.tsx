@@ -31,23 +31,20 @@ export default async function AgendaPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data: todayAppts } = await supabase
+  const { data: appts } = await supabase
     .from("appointments")
     .select(
       "id, barber_id, servico_id, cliente_nome, cliente_telefone, data, hora_inicio, hora_fim, status, created_at, updated_at, services ( id, nome, preco, duracao_minutos )"
     )
     .eq("barber_id", user.id)
-    .eq("data", today)
     .eq("status", "scheduled")
-    .order("hora_inicio");
-
-  const { data: appts } = await supabase
-    .from("appointments")
-    .select("*, services(nome)")
-    .eq("barber_id", user.id)
     .gte("data", today)
-    .order("data")
-    .order("hora_inicio");
+    .order("data", { ascending: true })
+    .order("hora_inicio", { ascending: true })
+    .limit(400);
+
+  const list = normalizeJoinedAppointments(appts) as Appointment[];
+  const todayAppts = list.filter((a) => a.data === today);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
@@ -82,12 +79,12 @@ export default async function AgendaPage() {
         <Card>
           <h2 className="font-display text-xl font-semibold">Reservas futuras</h2>
           <ul className="mt-4 space-y-3">
-            {((appts ?? []) as Appointment[]).length === 0 ? (
+            {list.length === 0 ? (
               <li className="text-sm text-[var(--muted)]">
                 Nenhum agendamento futuro.
               </li>
             ) : (
-              ((appts ?? []) as Appointment[]).map((a) => {
+              list.map((a) => {
                 const svc =
                   a.services &&
                   typeof a.services === "object" &&

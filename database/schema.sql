@@ -138,6 +138,10 @@ CREATE INDEX IF NOT EXISTS idx_appointments_barber_date ON public.appointments (
 CREATE INDEX IF NOT EXISTS idx_appointments_barber_date_start
   ON public.appointments (barber_id, data, hora_inicio);
 
+CREATE INDEX IF NOT EXISTS idx_appointments_barber_scheduled_data
+  ON public.appointments (barber_id, data)
+  WHERE status = 'scheduled';
+
 -- updated_at automático
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER

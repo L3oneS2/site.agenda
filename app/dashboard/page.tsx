@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { tryCreateClient } from "@/lib/supabase/server";
-import { getSubscription, isSubscriptionActive } from "@/lib/auth";
+import {
+  getBarbershopForCurrentUser,
+  getSubscription,
+  isSubscriptionActive,
+} from "@/lib/auth";
 import {
   subscriptionAllowsFullAccess,
   trialCalendarDaysRemainingUtc,
@@ -11,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { TrialReminderBanner } from "@/components/trial-reminder-banner";
 import { CompleteBarbershopForm } from "@/app/dashboard/ui/complete-barbershop-form";
 import { ServicesManager } from "@/app/dashboard/ui/services-manager";
-import type { Appointment, Barbershop, Service, Subscription } from "@/lib/types";
+import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
+import type { Appointment, Service, Subscription } from "@/lib/types";
 
 function subscriptionStatusLabel(sub: Subscription | null): string {
   if (!sub) return "Configurando…";
@@ -47,18 +52,14 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const sub = await getSubscription();
-
-  const { data: shop } = await supabase
-    .from("barbershops")
-    .select("*")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
+  const shop = await getBarbershopForCurrentUser();
   const today = new Date().toISOString().slice(0, 10);
 
   const { data: upcoming } = await supabase
     .from("appointments")
-    .select("*, services(nome)")
+    .select(
+      "id, barber_id, servico_id, cliente_nome, cliente_telefone, data, hora_inicio, hora_fim, status, created_at, updated_at, services ( nome )"
+    )
     .eq("barber_id", user.id)
     .eq("status", "scheduled")
     .gte("data", today)
@@ -76,8 +77,8 @@ export default async function DashboardPage() {
     mapServiceRow(row as Record<string, unknown>)
   );
 
-  const barbershop = shop as Barbershop | null;
-  const rows = (upcoming ?? []) as Appointment[];
+  const barbershop = shop;
+  const rows = normalizeJoinedAppointments(upcoming) as Appointment[];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">

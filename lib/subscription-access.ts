@@ -1,5 +1,10 @@
 import type { Subscription } from "@/lib/types";
 
+export type SubscriptionAccessFields = Pick<
+  Subscription,
+  "status" | "current_period_end" | "trial_end_date" | "account_blocked"
+>;
+
 /** Data civil em UTC (`YYYY-MM-DD`), alinhada ao servidor Postgres quando usa `CURRENT_DATE` em UTC. */
 export function utcTodayYmd(now = new Date()): string {
   return now.toISOString().slice(0, 10);
@@ -21,7 +26,9 @@ export function trialCalendarDaysRemainingUtc(
 }
 
 /** Acesso completo ao painel / agenda: plano Stripe ativo ou trial válido sem bloqueio. */
-export function subscriptionAllowsFullAccess(sub: Subscription | null): boolean {
+export function subscriptionAllowsFullAccess(
+  sub: SubscriptionAccessFields | null
+): boolean {
   if (!sub || sub.account_blocked) return false;
   if (sub.status === "active") {
     if (!sub.current_period_end) return true;

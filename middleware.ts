@@ -81,7 +81,11 @@ export async function middleware(request: NextRequest) {
     if (profile?.role === "barber") {
       const [{ data: shop }, { data: sub }] = await Promise.all([
         supabase.from("barbershops").select("id").eq("user_id", user.id).maybeSingle(),
-        supabase.from("subscriptions").select("*").eq("user_id", user.id).maybeSingle(),
+        supabase
+          .from("subscriptions")
+          .select("status, current_period_end, trial_end_date, account_blocked")
+          .eq("user_id", user.id)
+          .maybeSingle(),
       ]);
 
       const bootstrapping = !shop;

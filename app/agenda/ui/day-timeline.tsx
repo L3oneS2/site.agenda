@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getBarberAppointmentsForDay } from "@/app/actions/barber";
 import { timeStrToMinutes } from "@/lib/scheduling";
 import type { Appointment } from "@/lib/types";
@@ -46,8 +46,16 @@ export function DayTimeline({
   const [date, setDate] = useState(initialDate);
   const [rows, setRows] = useState<Appointment[]>(initialAppointments);
   const [loading, setLoading] = useState(false);
+  const isFirstEffect = useRef(true);
 
   useEffect(() => {
+    if (isFirstEffect.current) {
+      isFirstEffect.current = false;
+      if (date === initialDate) {
+        return;
+      }
+    }
+
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -60,7 +68,7 @@ export function DayTimeline({
     return () => {
       cancelled = true;
     };
-  }, [date]);
+  }, [date, initialDate]);
 
   const ticks = useMemo(() => {
     const out: number[] = [];

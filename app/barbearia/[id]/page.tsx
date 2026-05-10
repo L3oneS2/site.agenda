@@ -1,10 +1,18 @@
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 import { tryCreateClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabaseAdmin";
 import { Card } from "@/components/ui/card";
-import { PublicBarbershop } from "./ui/public-barbershop";
 import type { Barbershop, Service } from "@/lib/types";
+
+const PublicBarbershop = dynamic(
+  () =>
+    import("./ui/public-barbershop").then((m) => ({
+      default: m.PublicBarbershop,
+    })),
+  { loading: () => <p className="mt-6 text-sm text-[var(--muted)]">Carregando…</p> }
+);
 
 function mapServiceRow(r: Record<string, unknown>): Service {
   return {
