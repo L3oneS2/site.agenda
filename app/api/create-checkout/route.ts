@@ -43,16 +43,33 @@ export async function POST(request: Request) {
       metadata: { supabase_user_id: user.id },
     });
     customerId = customer.id;
-    const { error: upsertError } = await admin.from("subscriptions").upsert(
-      {
+    const { data: existingSub, error: selectErr } = await admin
+      .from("subscriptions")
+      .select("user_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (selectErr) {
+      return NextResponse.json({ error: selectErr.message }, { status: 500 });
+    }
+
+    if (existingSub) {
+      const { error: updErr } = await admin
+        .from("subscriptions")
+        .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
+        .eq("user_id", user.id);
+      if (updErr) {
+        return NextResponse.json({ error: updErr.message }, { status: 500 });
+      }
+    } else {
+      const { error: insErr } = await admin.from("subscriptions").insert({
         user_id: user.id,
         stripe_customer_id: customerId,
         status: "expired",
-      },
-      { onConflict: "user_id" }
-    );
-    if (upsertError) {
-      return NextResponse.json({ error: upsertError.message }, { status: 500 });
+      });
+      if (insErr) {
+        return NextResponse.json({ error: insErr.message }, { status: 500 });
+      }
     }
   }
 

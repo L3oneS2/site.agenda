@@ -8,7 +8,6 @@ export interface Profile {
   id: string;
   nome: string;
   telefone: string;
-  cpf: string;
   role: ProfileRole;
   created_at: string;
   updated_at: string;

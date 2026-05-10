@@ -52,8 +52,6 @@ export async function finalizeBarberBootstrap(
 ): Promise<BootstrapBarberResult> {
   const nome_barbearia = String(formData.get("nome_barbearia") ?? "").trim();
   const endereco = String(formData.get("endereco") ?? "").trim();
-  const cpfRaw = String(formData.get("cpf") ?? "");
-  const cpfDigits = normalizeDigits(cpfRaw);
   let deviceSignals: unknown = null;
 
   try {
@@ -67,9 +65,6 @@ export async function finalizeBarberBootstrap(
 
   if (!nome_barbearia) {
     return { ok: false, error: "Informe o nome da barbearia." };
-  }
-  if (!cpfDigits || cpfDigits.length < 11) {
-    return { ok: false, error: "Informe um CPF válido (11 dígitos)." };
   }
 
   const supabase = await createClient();
@@ -125,15 +120,17 @@ export async function finalizeBarberBootstrap(
   }
 
   const telefoneDigits = normalizeDigits(String(prof.telefone ?? ""));
+  if (telefoneDigits.length < 10) {
+    return {
+      ok: false,
+      error: "Informe um telefone válido com DDD (pelo menos 10 dígitos) no cadastro.",
+    };
+  }
   const emailNorm = normalizeSignupEmail(user.email);
   const subnet = coarseIpSubnetKey(ip);
 
   const p_email_hash = hashTrialIdentifier("email", emailNorm);
-  const p_cpf_hash = hashTrialIdentifier("cpf", cpfDigits);
-  const p_phone_hash = hashTrialIdentifier(
-    "phone",
-    telefoneDigits.length >= 10 ? telefoneDigits : `_short_${telefoneDigits}`
-  );
+  const p_phone_hash = hashTrialIdentifier("phone", telefoneDigits);
   const p_device_hash = hashDevicePayloadJson(deviceSignals);
   const p_ip_subnet_hash = hashTrialIdentifier("ip_subnet", subnet);
 
@@ -142,13 +139,11 @@ export async function finalizeBarberBootstrap(
     {
       p_user_id: user.id,
       p_email_hash,
-      p_cpf_hash,
       p_phone_hash,
       p_device_hash,
       p_ip_subnet_hash,
       p_nome_barbearia: nome_barbearia,
       p_endereco: endereco,
-      p_cpf_digits: cpfDigits,
     }
   );
 

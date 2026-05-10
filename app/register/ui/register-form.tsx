@@ -89,7 +89,7 @@ export function RegisterForm() {
         }
         if (r.trialEligible === false) {
           toast.warning(
-            "Este CPF, telefone ou e-mail já utilizou o período gratuito. Assine para continuar."
+            "Este telefone, e-mail ou dispositivo/rede já utilizou o período gratuito. Assine para continuar."
           );
           router.push("/assinatura?trial_denied=1");
           router.refresh();
@@ -125,13 +125,7 @@ export function RegisterForm() {
         label="Telefone (WhatsApp)"
         required
         autoComplete="tel"
-      />
-      <Input
-        name="cpf"
-        label="CPF (antifraude trial)"
-        required
-        autoComplete="off"
-        inputMode="numeric"
+        minLength={10}
       />
       <Input name="nome_barbearia" label="Nome da barbearia" required />
       <Input name="endereco" label="Endereço" />

@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -18,22 +19,32 @@ export function ServicesManager({ initialServices }: { initialServices: Service[
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  async function handleCreateService(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    setLoading(true);
+    try {
+      const fd = new FormData(form);
+      const r = await createService(fd);
+      if (r.error) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success("Serviço criado");
+      if (form.isConnected) {
+        form.reset();
+      }
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <div className="mt-6 space-y-6">
       <form
         className="grid gap-3 rounded-2xl border border-[var(--border)] bg-black/[0.02] p-4 dark:bg-white/[0.03] sm:grid-cols-2"
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setLoading(true);
-          const r = await createService(new FormData(e.currentTarget));
-          setLoading(false);
-          if (r.error) toast.error(r.error);
-          else {
-            toast.success("Serviço criado");
-            e.currentTarget.reset();
-            router.refresh();
-          }
-        }}
+        onSubmit={handleCreateService}
       >
         <p className="font-medium sm:col-span-2">Novo serviço</p>
         <Input name="nome" label="Nome" required placeholder="Ex.: Corte + barba" />
@@ -76,18 +87,23 @@ export function ServicesManager({ initialServices }: { initialServices: Service[
               {editingId === s.id ? (
                 <form
                   className="grid gap-3 sm:grid-cols-2"
-                  onSubmit={async (e) => {
+                  onSubmit={async (e: FormEvent<HTMLFormElement>) => {
                     e.preventDefault();
+                    const form = e.currentTarget;
                     setLoading(true);
-                    const fd = new FormData(e.currentTarget);
-                    fd.set("id", s.id);
-                    const r = await updateService(fd);
-                    setLoading(false);
-                    if (r.error) toast.error(r.error);
-                    else {
+                    try {
+                      const fd = new FormData(form);
+                      fd.set("id", s.id);
+                      const r = await updateService(fd);
+                      if (r.error) {
+                        toast.error(r.error);
+                        return;
+                      }
                       toast.success("Serviço atualizado");
                       setEditingId(null);
                       router.refresh();
+                    } finally {
+                      setLoading(false);
                     }
                   }}
                 >

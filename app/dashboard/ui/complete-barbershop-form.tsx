@@ -40,13 +40,6 @@ export function CompleteBarbershopForm() {
     >
       <Input name="nome_barbearia" label="Nome da barbearia" required />
       <Input name="endereco" label="Endereço" />
-      <Input
-        name="cpf"
-        label="CPF (antifraude trial)"
-        required
-        autoComplete="off"
-        inputMode="numeric"
-      />
       <DevicePayloadField />
       <Button type="submit" className="w-full sm:w-auto" disabled={loading}>
         {loading ? "Salvando…" : "Salvar barbearia"}

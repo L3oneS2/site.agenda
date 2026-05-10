@@ -28,7 +28,6 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
   nome TEXT NOT NULL DEFAULT '',
   telefone TEXT NOT NULL DEFAULT '',
-  cpf TEXT NOT NULL DEFAULT '',
   role public.profile_role NOT NULL DEFAULT 'client',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -71,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.trial_identifier_claims (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
   kind TEXT NOT NULL CHECK (
     kind = ANY (
-      ARRAY['email','cpf','phone','device','ip_subnet'::text]
+      ARRAY['email','phone','device','ip_subnet'::text]
     )
   ),
   value_hash TEXT NOT NULL,
@@ -232,13 +231,11 @@ $$;
 CREATE OR REPLACE FUNCTION public.finalize_barber_bootstrap (
   p_user_id uuid,
   p_email_hash text,
-  p_cpf_hash text,
   p_phone_hash text,
   p_device_hash text,
   p_ip_subnet_hash text,
   p_nome_barbearia text,
-  p_endereco text,
-  p_cpf_digits text
+  p_endereco text
 )
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -263,7 +260,6 @@ BEGIN
       SELECT 1
       FROM public.trial_identifier_claims c
       WHERE (c.kind = 'email' AND c.value_hash = p_email_hash)
-         OR (c.kind = 'cpf' AND c.value_hash = p_cpf_hash)
          OR (c.kind = 'phone' AND c.value_hash = p_phone_hash)
          OR (c.kind = 'device' AND c.value_hash = p_device_hash)
          OR (c.kind = 'ip_subnet' AND c.value_hash = p_ip_subnet_hash)
@@ -282,10 +278,6 @@ BEGIN
   SET nome_barbearia = excluded.nome_barbearia,
       endereco = excluded.endereco,
       updated_at = now ();
-
-  UPDATE public.profiles
-  SET cpf = coalesce(nullif(trim(p_cpf_digits), ''), cpf)
-  WHERE id = p_user_id;
 
   IF v_eligible THEN
     v_start := ((now() AT TIME ZONE 'utc'))::date;
@@ -315,7 +307,6 @@ BEGIN
     INSERT INTO public.trial_identifier_claims (kind, value_hash, user_id)
     VALUES
       ('email', p_email_hash, p_user_id),
-      ('cpf', p_cpf_hash, p_user_id),
       ('phone', p_phone_hash, p_user_id),
       ('device', p_device_hash, p_user_id),
       ('ip_subnet', p_ip_subnet_hash, p_user_id);
@@ -356,11 +347,11 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.finalize_barber_bootstrap (
-  uuid, text, text, text, text, text, text, text, text
+  uuid, text, text, text, text, text, text
 ) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.finalize_barber_bootstrap (
-  uuid, text, text, text, text, text, text, text, text
+  uuid, text, text, text, text, text, text
 ) TO service_role;
 
 REVOKE ALL ON FUNCTION public.subscription_grants_public_access (public.subscriptions) FROM PUBLIC;
