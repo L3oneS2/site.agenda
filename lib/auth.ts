@@ -4,6 +4,13 @@ import { tryCreateClient } from "@/lib/supabase/server";
 import { subscriptionAllowsFullAccess } from "@/lib/subscription-access";
 import type { Barbershop, Profile, Subscription } from "@/lib/types";
 
+/**
+ * Sessão no servidor (RSC / Server Actions). Deduplicada com `cache()` por request.
+ *
+ * O middleware Edge ainda chama `getUser()` para proteger rotas e propagar cookies;
+ * isso não é eliminável sem perder refresh/redirects confiáveis. Evite adicionar outras
+ * leituras redundantes de auth no mesmo request — reutilize este helper ou `createClient`.
+ */
 export const getSessionUser = cache(async () => {
   const supabase = await tryCreateClient();
   if (!supabase) {
@@ -28,7 +35,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
   if (!supabase) return null;
   const { data } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, nome, telefone, role, created_at, updated_at")
     .eq("id", user.id)
     .single();
   return data as Profile | null;
@@ -48,7 +55,9 @@ export const getSubscription = cache(async (): Promise<Subscription | null> => {
   if (!supabase) return null;
   const { data } = await supabase
     .from("subscriptions")
-    .select("*")
+    .select(
+      "id, user_id, status, stripe_customer_id, stripe_subscription_id, current_period_end, trial_start_date, trial_end_date, account_blocked, created_at, updated_at"
+    )
     .eq("user_id", user.id)
     .maybeSingle();
   return data as Subscription | null;
@@ -63,7 +72,7 @@ export const getBarbershopForCurrentUser = cache(
     if (!supabase) return null;
     const { data } = await supabase
       .from("barbershops")
-      .select("*")
+      .select("id, user_id, nome_barbearia, endereco, created_at, updated_at")
       .eq("user_id", user.id)
       .maybeSingle();
     return data as Barbershop | null;

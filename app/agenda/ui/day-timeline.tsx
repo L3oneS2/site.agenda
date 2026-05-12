@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { getBarberAppointmentsForDay } from "@/app/actions/barber";
+import { logClientDebug, logJsonLine } from "@/lib/supabase/debug-env";
+import { Button } from "@/components/ui/button";
 import { timeStrToMinutes } from "@/lib/scheduling";
 import type { Appointment } from "@/lib/types";
 
@@ -46,7 +49,49 @@ export function DayTimeline({
   const [date, setDate] = useState(initialDate);
   const [rows, setRows] = useState<Appointment[]>(initialAppointments);
   const [loading, setLoading] = useState(false);
+  const [fetchHint, setFetchHint] = useState<string | null>(null);
   const isFirstEffect = useRef(true);
+
+  const loadDay = useCallback(async (signal: AbortSignal) => {
+    setLoading(true);
+    setFetchHint(null);
+    try {
+      const r = await getBarberAppointmentsForDay(date);
+      if (signal.aborted) return;
+      if (r.error) {
+        logClientDebug("agenda", "getBarberAppointmentsForDay retornou erro", {
+          date,
+          error: r.error,
+        });
+        toast.error("Não foi possível carregar a agenda deste dia.");
+        setRows([]);
+        setFetchHint(
+          "Falha ao buscar agendamentos. Verifique a conexão ou tente novamente."
+        );
+        return;
+      }
+      setRows(r.appointments ?? []);
+    } catch (e) {
+      if (signal.aborted) return;
+      const message = e instanceof Error ? e.message : String(e);
+      logJsonLine({
+        where: "DayTimeline.getBarberAppointmentsForDay",
+        date,
+        message,
+      });
+      logClientDebug("agenda", "getBarberAppointmentsForDay exceção", {
+        date,
+        message,
+      });
+      toast.error("Erro inesperado ao carregar a agenda.");
+      setRows([]);
+      setFetchHint(
+        "Não foi possível atualizar. Tente novamente ou recarregue a página."
+      );
+    } finally {
+      if (!signal.aborted) setLoading(false);
+    }
+  }, [date]);
 
   useEffect(() => {
     if (isFirstEffect.current) {
@@ -56,19 +101,10 @@ export function DayTimeline({
       }
     }
 
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      const r = await getBarberAppointmentsForDay(date);
-      if (cancelled) return;
-      setLoading(false);
-      if (r.error) setRows([]);
-      else setRows(r.appointments ?? []);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [date, initialDate]);
+    const ac = new AbortController();
+    void loadDay(ac.signal);
+    return () => ac.abort();
+  }, [date, initialDate, loadDay]);
 
   const ticks = useMemo(() => {
     const out: number[] = [];
@@ -96,6 +132,23 @@ export function DayTimeline({
           <span className="text-xs text-[var(--muted)]">Atualizando…</span>
         ) : null}
       </div>
+      {fetchHint ? (
+        <div className="flex flex-col gap-2 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100">
+          <p>{fetchHint}</p>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-fit !py-2 text-xs"
+            disabled={loading}
+            onClick={() => {
+              const ac = new AbortController();
+              void loadDay(ac.signal);
+            }}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : null}
       <p className="text-xs capitalize text-[var(--muted)]">{formatLabel(date)}</p>
 
       <div className="relative flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 pl-2">
@@ -135,6 +188,11 @@ export function DayTimeline({
               />
             );
           })}
+          {!loading && rows.length === 0 && !fetchHint ? (
+            <p className="pointer-events-none absolute left-2 right-2 top-1/2 -translate-y-1/2 text-center text-xs text-[var(--muted)]">
+              Nenhum agendamento neste dia.
+            </p>
+          ) : null}
           {rows.map((a) => {
             const start = timeStrToMinutes(String(a.hora_inicio));
             const end = timeStrToMinutes(String(a.hora_fim));

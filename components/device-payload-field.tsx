@@ -1,12 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+type Props = {
+  /** Notifica quando o payload está pronto (use o setter de `useState` ou `useCallback` estável). */
+  onReadyChange?: (ready: boolean) => void;
+};
 
 /** Sinais estáveis do browser; o hash seguro com pepper ocorre apenas no servidor. */
-export function DevicePayloadField() {
+export function DevicePayloadField({ onReadyChange }: Props) {
   const [json, setJson] = useState("");
+  const readyCb = useRef(onReadyChange);
+  readyCb.current = onReadyChange;
 
   useEffect(() => {
+    readyCb.current?.(false);
     if (typeof window === "undefined") return;
     let seed = "";
     try {
@@ -18,16 +26,20 @@ export function DevicePayloadField() {
     } catch {
       seed = crypto.randomUUID();
     }
-    setJson(
-      JSON.stringify({
-        v: 1,
-        seed,
-        tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        lang: navigator.language,
-        platform: navigator.userAgent.slice(0, 256),
-      })
-    );
+    const payload = JSON.stringify({
+      v: 1,
+      seed,
+      tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      lang: navigator.language,
+      platform: navigator.userAgent.slice(0, 256),
+    });
+    setJson(payload);
+    readyCb.current?.(true);
   }, []);
+
+  if (!json) {
+    return null;
+  }
 
   return <input type="hidden" name="device_payload" value={json} readOnly />;
 }

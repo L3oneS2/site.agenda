@@ -8,6 +8,7 @@ import {
   cancelAppointment,
   deleteAvailability,
 } from "@/app/actions/barber";
+import { logAppDebug } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Availability } from "@/lib/types";
@@ -21,18 +22,27 @@ export function AgendaClient({
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function onAdd(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     const fd = new FormData(e.currentTarget);
-    const r = await addAvailability(fd);
-    setLoading(false);
-    if (r.error) toast.error(r.error);
-    else {
-      toast.success("Horário adicionado");
-      e.currentTarget.reset();
-      router.refresh();
+    try {
+      const r = await addAvailability(fd);
+      if (r.error) toast.error(r.error);
+      else {
+        toast.success("Horário adicionado");
+        e.currentTarget.reset();
+        router.refresh();
+      }
+    } catch (err) {
+      logAppDebug("agenda", "addAvailability exceção", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      toast.error("Falha ao adicionar horário. Tente novamente.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -82,16 +92,27 @@ export function AgendaClient({
                 type="button"
                 variant="danger"
                 className="!py-1.5 !px-3 text-xs"
+                disabled={deletingId !== null}
                 onClick={async () => {
-                  const r = await deleteAvailability(b.id);
-                  if (r.error) toast.error(r.error);
-                  else {
-                    toast.success("Removido");
-                    router.refresh();
+                  setDeletingId(b.id);
+                  try {
+                    const r = await deleteAvailability(b.id);
+                    if (r.error) toast.error(r.error);
+                    else {
+                      toast.success("Removido");
+                      router.refresh();
+                    }
+                  } catch (err) {
+                    logAppDebug("agenda", "deleteAvailability exceção", {
+                      message: err instanceof Error ? err.message : String(err),
+                    });
+                    toast.error("Falha ao excluir. Tente novamente.");
+                  } finally {
+                    setDeletingId(null);
                   }
                 }}
               >
-                Excluir
+                {deletingId === b.id ? "…" : "Excluir"}
               </Button>
             </li>
           ))
@@ -103,21 +124,33 @@ export function AgendaClient({
 
 export function CancelAppointmentButton({ id }: { id: string }) {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
   return (
     <Button
       type="button"
       variant="outline"
       className="!py-2 !px-3 text-xs"
+      disabled={loading}
       onClick={async () => {
-        const r = await cancelAppointment(id);
-        if (r.error) toast.error(r.error);
-        else {
-          toast.success("Agendamento cancelado");
-          router.refresh();
+        setLoading(true);
+        try {
+          const r = await cancelAppointment(id);
+          if (r.error) toast.error(r.error);
+          else {
+            toast.success("Agendamento cancelado");
+            router.refresh();
+          }
+        } catch (err) {
+          logAppDebug("agenda", "cancelAppointment exceção", {
+            message: err instanceof Error ? err.message : String(err),
+          });
+          toast.error("Falha ao cancelar. Tente novamente.");
+        } finally {
+          setLoading(false);
         }
       }}
     >
-      Cancelar
+      {loading ? "Cancelando…" : "Cancelar"}
     </Button>
   );
 }

@@ -1,0 +1,11 @@
+# Alinhamento Windows/macOS/Linux (A2): finais de linha e charset consistentes nos IDEs.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+
+[*.{ts,tsx,js,jsx,mjs,cjs,json,css,md,yml,yaml,sql}]
+indent_style = space
+indent_size = 2

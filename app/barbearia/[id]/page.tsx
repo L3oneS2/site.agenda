@@ -2,8 +2,10 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { notFound } from "next/navigation";
 import { tryCreateClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabaseAdmin";
+import { createAdminClient, tryCreateAdminClient } from "@/lib/supabaseAdmin";
+import { isPublicSubscriptionBypassEnabled } from "@/lib/public-subscription-bypass";
 import { Card } from "@/components/ui/card";
+import { mapServiceRows } from "@/lib/map-service-row";
 import type { Barbershop, Service } from "@/lib/types";
 
 const PublicBarbershop = dynamic(
@@ -14,18 +16,6 @@ const PublicBarbershop = dynamic(
   { loading: () => <p className="mt-6 text-sm text-[var(--muted)]">Carregando…</p> }
 );
 
-function mapServiceRow(r: Record<string, unknown>): Service {
-  return {
-    id: String(r.id),
-    user_id: String(r.user_id),
-    nome: String(r.nome),
-    preco: Number(r.preco),
-    duracao_minutos: Number(r.duracao_minutos),
-    created_at: String(r.created_at),
-    updated_at: String(r.updated_at),
-  };
-}
-
 export default async function BarbeariaPublicPage({
   params,
 }: {
@@ -35,11 +25,11 @@ export default async function BarbeariaPublicPage({
   const supabase = await tryCreateClient();
   if (!supabase) notFound();
 
-  const bypass = process.env.PUBLIC_BYPASS_SUBSCRIPTION === "1";
+  const bypass = isPublicSubscriptionBypassEnabled();
 
   const { data: shop } = await supabase
     .from("barbershops")
-    .select("*")
+    .select("id, user_id, nome_barbearia, endereco, created_at, updated_at")
     .eq("id", id)
     .maybeSingle();
 
@@ -57,7 +47,7 @@ export default async function BarbeariaPublicPage({
       const admin = createAdminClient();
       const { data: rawShop } = await admin
         .from("barbershops")
-        .select("*")
+        .select("id, user_id, nome_barbearia, endereco, created_at, updated_at")
         .eq("id", id)
         .maybeSingle();
       exists = (rawShop as Barbershop | null) ?? null;
@@ -81,16 +71,33 @@ export default async function BarbeariaPublicPage({
     }
 
     if (bypass && exists) {
-      const admin = createAdminClient();
-      const { data: rawServices } = await admin
+      const adminBypass = tryCreateAdminClient();
+      if (!adminBypass) {
+        return (
+          <div className="mx-auto max-w-3xl px-4 py-16">
+            <Card>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-600">
+                Modo teste
+              </p>
+              <h1 className="mt-3 font-display text-2xl font-bold">
+                Servidor sem chave admin
+              </h1>
+              <p className="mt-3 text-sm text-[var(--muted)]">
+                `PUBLIC_BYPASS_SUBSCRIPTION` está ativo, mas `SUPABASE_SERVICE_ROLE_KEY` não está
+                configurada (ou está vazia). Configure no host e faça redeploy para carregar
+                serviços em modo bypass.
+              </p>
+            </Card>
+          </div>
+        );
+      }
+      const { data: rawServices } = await adminBypass
         .from("services")
-        .select("*")
+        .select("id, user_id, nome, preco, duracao_minutos, created_at, updated_at")
         .eq("user_id", exists.user_id)
         .order("nome");
 
-      const services = (rawServices ?? []).map((row) =>
-        mapServiceRow(row as Record<string, unknown>)
-      );
+      const services = mapServiceRows(rawServices as unknown[] | null);
 
       return (
         <div className="mx-auto max-w-3xl px-4 py-16">
@@ -185,13 +192,11 @@ export default async function BarbeariaPublicPage({
 
   const { data: rawServices } = await supabase
     .from("services")
-    .select("*")
+    .select("id, user_id, nome, preco, duracao_minutos, created_at, updated_at")
     .eq("user_id", barbershop.user_id)
     .order("nome");
 
-  const services = (rawServices ?? []).map((row) =>
-    mapServiceRow(row as Record<string, unknown>)
-  );
+  const services = mapServiceRows(rawServices as unknown[] | null);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16">

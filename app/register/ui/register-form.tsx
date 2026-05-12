@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabaseClient";
 import { finalizeBarberBootstrap } from "@/app/actions/bootstrap-barber";
-import { logAuthError, logSupabasePublicEnvDebug } from "@/lib/supabase/debug-env";
+import { logAppDebug, logAuthError, logClientDebug, logSupabasePublicEnvDebug } from "@/lib/supabase/debug-env";
 import { DevicePayloadField } from "@/components/device-payload-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 export function RegisterForm() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [deviceReady, setDeviceReady] = useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -66,8 +67,7 @@ export function RegisterForm() {
         return;
       }
 
-      // eslint-disable-next-line no-console
-      console.log("[register] signUp ok", {
+      logClientDebug("auth", "signUp ok", {
         userId: data.user?.id ?? null,
         hasSession: Boolean(data.session),
       });
@@ -76,6 +76,9 @@ export function RegisterForm() {
         const r = await finalizeBarberBootstrap(new FormData(form));
         if (!r.ok) {
           logAuthError("register:bootstrap", new Error(r.error ?? "bootstrap"));
+          logAppDebug("bootstrap", "finalizeBarberBootstrap falhou", {
+            error: r.error ?? null,
+          });
           toast.error(r.error ?? "Falha ao finalizar cadastro.");
           return;
         }
@@ -86,6 +89,9 @@ export function RegisterForm() {
           return;
         }
         if (r.trialEligible === false) {
+          logAppDebug("bootstrap", "trial não elegível após bootstrap", {
+            alreadyInitialized: r.alreadyInitialized,
+          });
           toast.warning(
             "Este telefone, e-mail ou dispositivo/rede já utilizou o período gratuito. Assine para continuar."
           );
@@ -106,6 +112,9 @@ export function RegisterForm() {
       router.refresh();
     } catch (err) {
       logAuthError("register:signUp-exception", err);
+      logAppDebug("auth", "register exceção", {
+        message: err instanceof Error ? err.message : String(err),
+      });
       const msg =
         err instanceof Error
           ? err.message
@@ -137,8 +146,13 @@ export function RegisterForm() {
         autoComplete="new-password"
         minLength={6}
       />
-      <DevicePayloadField />
-      <Button type="submit" className="w-full !py-3" disabled={loading}>
+      <DevicePayloadField onReadyChange={setDeviceReady} />
+      <Button
+        type="submit"
+        className="w-full !py-3"
+        disabled={loading || !deviceReady}
+        title={!deviceReady ? "Preparando identificador seguro…" : undefined}
+      >
         {loading ? "Criando…" : "Criar conta"}
       </Button>
     </form>

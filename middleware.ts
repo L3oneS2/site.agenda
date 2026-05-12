@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { type NextRequest, NextResponse } from "next/server";
 import { getPublicSupabaseEnv } from "@/lib/supabase/public-env";
+import { logGatewayError } from "@/lib/supabase/debug-env";
 import { subscriptionAllowsFullAccess } from "@/lib/subscription-access";
 
 const protectedPrefixes = ["/dashboard", "/agenda", "/assinatura", "/suporte"];
@@ -15,7 +16,7 @@ export async function middleware(request: NextRequest) {
   const env = getPublicSupabaseEnv();
 
   if (!env.ok) {
-    console.error("[middleware] Supabase env:\n", env.message);
+    logGatewayError("middleware.supabase_env", env.message);
 
     return new NextResponse(env.message, {
       status: 503,
@@ -68,6 +69,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api/")) {
+    // Autenticação por rota: o middleware não exige sessão aqui — cada handler em `app/api/**`
+    // aplica o mecanismo correto (sessão Supabase, Bearer de cron, assinatura Stripe, etc.).
+    // Ver comentários no topo de cada `route.ts` correspondente.
     return supabaseResponse;
   }
 
@@ -79,14 +83,22 @@ export async function middleware(request: NextRequest) {
       .maybeSingle();
 
     if (profile?.role === "barber") {
-      const [{ data: shop }, { data: sub }] = await Promise.all([
-        supabase.from("barbershops").select("id").eq("user_id", user.id).maybeSingle(),
-        supabase
-          .from("subscriptions")
-          .select("status, current_period_end, trial_end_date, account_blocked")
-          .eq("user_id", user.id)
-          .maybeSingle(),
-      ]);
+      const billingOrSupport =
+        pathname.startsWith("/assinatura") || pathname.startsWith("/suporte");
+      const shopPromise = supabase
+        .from("barbershops")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const subPromise = billingOrSupport
+        ? Promise.resolve({ data: null as null })
+        : supabase
+            .from("subscriptions")
+            .select("status, current_period_end, trial_end_date, account_blocked")
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+      const [{ data: shop }, { data: sub }] = await Promise.all([shopPromise, subPromise]);
 
       const bootstrapping = !shop;
 
@@ -99,7 +111,7 @@ export async function middleware(request: NextRequest) {
         return supabaseResponse;
       }
 
-      if (pathname.startsWith("/assinatura") || pathname.startsWith("/suporte")) {
+      if (billingOrSupport) {
         return supabaseResponse;
       }
 

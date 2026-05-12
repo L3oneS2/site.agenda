@@ -1,0 +1,3 @@
+# Texto normalizado em LF (evita diffs ruídosos Windows/macOS/Linux em tooling CI).
+# Imports e paths no repositório: usar sempre `/` em código e em paths Git; no Windows o explorador pode mostrar `\`, mas o índice Git permanece coerente.
+* text=auto eol=lf

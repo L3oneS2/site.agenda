@@ -1,13 +1,32 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabaseAdmin";
+import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
 import { getStripe } from "@/lib/stripe";
+import { logJsonLine } from "@/lib/supabase/debug-env";
 
+/**
+ * Checkout Stripe autenticado por **sessão Supabase** (cookies), igual às páginas protegidas do App Router.
+ * Não depende do middleware para validar usuário em `/api/*` — o handler chama `getUser()` explicitamente.
+ *
+ * Corpo JSON: sucesso `{ ok: true, url }`; erro `{ ok: false, error }` (compatível com clientes que só leem `url` / `error`).
+ */
 export async function POST(request: Request) {
   const priceId = process.env.STRIPE_PRICE_ID;
-  if (!priceId) {
+  if (!priceId?.trim()) {
     return NextResponse.json(
-      { error: "STRIPE_PRICE_ID não configurado." },
+      { ok: false, error: "STRIPE_PRICE_ID não configurado." },
+      { status: 500 }
+    );
+  }
+
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) {
+    logJsonLine({
+      where: "api.create-checkout",
+      phase: "misconfig",
+      message: "STRIPE_SECRET_KEY ausente",
+    });
+    return NextResponse.json(
+      { ok: false, error: "STRIPE_SECRET_KEY não configurado no servidor." },
       { status: 500 }
     );
   }
@@ -18,7 +37,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user?.email) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    return NextResponse.json({ ok: false, error: "Não autorizado" }, { status: 401 });
   }
 
   const origin =
@@ -26,8 +45,19 @@ export async function POST(request: Request) {
     process.env.NEXT_PUBLIC_APP_URL ??
     new URL(request.url).origin;
 
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error:
+          "Checkout indisponível: configure SUPABASE_SERVICE_ROLE_KEY no servidor (ex.: Vercel → Environment Variables) e faça redeploy.",
+      },
+      { status: 503 }
+    );
+  }
+
   const stripe = getStripe();
-  const admin = createAdminClient();
 
   const { data: row } = await admin
     .from("subscriptions")
@@ -50,7 +80,7 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (selectErr) {
-      return NextResponse.json({ error: selectErr.message }, { status: 500 });
+      return NextResponse.json({ ok: false, error: selectErr.message }, { status: 500 });
     }
 
     if (existingSub) {
@@ -59,7 +89,7 @@ export async function POST(request: Request) {
         .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
         .eq("user_id", user.id);
       if (updErr) {
-        return NextResponse.json({ error: updErr.message }, { status: 500 });
+        return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
       }
     } else {
       const { error: insErr } = await admin.from("subscriptions").insert({
@@ -68,7 +98,7 @@ export async function POST(request: Request) {
         status: "expired",
       });
       if (insErr) {
-        return NextResponse.json({ error: insErr.message }, { status: 500 });
+        return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
       }
     }
   }
@@ -87,10 +117,10 @@ export async function POST(request: Request) {
 
   if (!session.url) {
     return NextResponse.json(
-      { error: "Falha ao criar sessão de checkout." },
+      { ok: false, error: "Falha ao criar sessão de checkout." },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ url: session.url });
+  return NextResponse.json({ ok: true, url: session.url });
 }

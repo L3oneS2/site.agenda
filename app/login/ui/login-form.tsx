@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabaseClient";
-import { logAuthError, logSupabasePublicEnvDebug } from "@/lib/supabase/debug-env";
+import { logAppDebug, logAuthError, logSupabasePublicEnvDebug } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -41,8 +41,6 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
         password,
       });
 
-      setLoading(false);
-
       if (error) {
         logAuthError("login:signIn", error);
         toast.error(error.message);
@@ -59,13 +57,17 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
       router.push(safe);
       router.refresh();
     } catch (err) {
-      setLoading(false);
       logAuthError("login:signIn-exception", err);
+      logAppDebug("auth", "login exceção", {
+        message: err instanceof Error ? err.message : String(err),
+      });
       toast.error(
         err instanceof Error
           ? err.message
           : "Falha de rede. Verifique NEXT_PUBLIC_SUPABASE_URL e sua conexão."
       );
+    } finally {
+      setLoading(false);
     }
   }
 

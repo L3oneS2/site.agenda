@@ -1,10 +1,15 @@
 "use server";
 
+/**
+ * Bootstrap pós-cadastro: acoplado a Supabase (RPC, rate limit) e headers.
+ * Ver `README.md` nesta pasta para notas de arquitetura.
+ */
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
+import { logAppDebug } from "@/lib/supabase/debug-env";
 import {
   clientIpFromHeaders,
   coarseIpSubnetKey,
@@ -47,7 +52,13 @@ async function signupRateExceeded(
     .eq("ip", ip)
     .gte("occurred_at", since);
 
-  if (error) return true;
+  if (error) {
+    logAppDebug("bootstrap", "signup_rate_events: falha na contagem (não bloquear cadastro)", {
+      message: error.message,
+      code: error.code,
+    });
+    return false;
+  }
   return (count ?? 0) >= MAX_ATTEMPTS_PER_WINDOW;
 }
 
@@ -106,8 +117,21 @@ async function runFinalizeRpc(
 
   const p_email_hash = hashTrialIdentifier("email", emailNorm);
   const p_phone_hash = hashTrialIdentifier("phone", telefoneDigits);
+  /* RPC ainda recebe hashes de device/IP por compatibilidade de assinatura; a elegibilidade de trial
+   * usa apenas e-mail + telefone (ver `database/migrations/20260512_trial_antifraud_email_phone_only.sql`). */
   const p_device_hash = hashDevicePayloadJson(deviceSignals);
   const p_ip_subnet_hash = hashTrialIdentifier("ip_subnet", subnet);
+
+  logBootstrap("trial_antifraud_input", {
+    ipSubnetKey: subnet,
+    devicePayloadPresent: Boolean(deviceSignals && typeof deviceSignals === "object"),
+    emailLocalPartLen: emailNorm.split("@")[0]?.length ?? 0,
+    phoneDigitsLen: telefoneDigits.length,
+    hashPrefixes: {
+      email: p_email_hash.slice(0, 8),
+      phone: p_phone_hash.slice(0, 8),
+    },
+  });
 
   const { data: rpcRaw, error: rpcErr } = await client.rpc(
     "finalize_barber_bootstrap",
@@ -143,6 +167,11 @@ async function runFinalizeRpc(
       error: "Não foi possível concluir o cadastro. Tente novamente.",
     };
   }
+
+  logBootstrap("trial_antifraud_result", {
+    trialEligible: Boolean(rpc.trial_eligible),
+    alreadyInitialized: Boolean(rpc.already_initialized),
+  });
 
   return {
     ok: true,

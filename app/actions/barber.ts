@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
 import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
+import { logJsonLine } from "@/lib/supabase/debug-env";
 import type { Appointment } from "@/lib/types";
 
 export async function addAvailability(formData: FormData) {
@@ -82,9 +83,17 @@ export async function getBarberAppointmentsForDay(
     .eq("barber_id", user.id)
     .eq("data", date)
     .eq("status", "scheduled")
-    .order("hora_inicio");
+    .order("hora_inicio")
+    .limit(120);
 
-  if (error) return { error: error.message };
+  if (error) {
+    logJsonLine({
+      where: "getBarberAppointmentsForDay",
+      code: error.code,
+      message: error.message,
+    });
+    return { error: error.message };
+  }
 
-  return { appointments: normalizeJoinedAppointments(data) };
+  return { appointments: normalizeJoinedAppointments(data ?? []) };
 }

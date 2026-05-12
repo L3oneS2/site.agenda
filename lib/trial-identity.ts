@@ -1,11 +1,34 @@
 import { createHash } from "node:crypto";
 
+let warnedShortTrialPepper = false;
+
+/**
+ * Pepper secreto para hashes de trial (e-mail/telefone/dispositivo).
+ *
+ * - **Produção:** defina `TRIAL_IDENTITY_PEPPER` com alta entropia (ex.: `openssl rand -hex 32`).
+ *   Sem isso, `getTrialIdentityPepper()` lança na primeira operação que calcular hash.
+ * - **Desenvolvimento:** se ausente, usa placeholder fixo (nunca use isso em produção).
+ */
 export function getTrialIdentityPepper(): string {
   const p = process.env.TRIAL_IDENTITY_PEPPER?.trim();
-  if (p) return p;
+  if (p) {
+    if (
+      process.env.NODE_ENV === "production" &&
+      p.length < 24 &&
+      !warnedShortTrialPepper
+    ) {
+      warnedShortTrialPepper = true;
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[trial-identity] TRIAL_IDENTITY_PEPPER muito curto em produção; recomenda-se 32+ bytes aleatórios (ex.: openssl rand -hex 32)."
+      );
+    }
+    return p;
+  }
   if (process.env.NODE_ENV === "production") {
     throw new Error(
-      "TRIAL_IDENTITY_PEPPER é obrigatório em produção (hash seguro dos identificadores de trial)."
+      "TRIAL_IDENTITY_PEPPER é obrigatório em produção (hash de anti-fraude trial). " +
+        "Gere um valor aleatório forte e configure no host (ex.: Vercel → Environment Variables)."
     );
   }
   return "__development_trial_pepper_change_me__";
@@ -44,7 +67,11 @@ export function clientIpFromHeaders(h: Headers): string {
   return "0.0.0.0";
 }
 
-/** Hash estável combinando sinais enviados pelo browser (never trust só dispositivo). */
+/**
+ * Hash estável combinando sinais do browser.
+ * Sem payload válido, todos os cadastros compartilhariam o mesmo hash ("missing") —
+ * não use isso sozinho para bloqueio global (ver RPC finalize_barber_bootstrap).
+ */
 export function hashDevicePayloadJson(raw: unknown): string {
   if (!raw || typeof raw !== "object") {
     return hashTrialIdentifier("device", "missing");

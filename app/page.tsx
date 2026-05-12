@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { ClientQuickAccess } from "@/components/client-quick-access";
 
+/** Marketing estático: ISR leve entre deploys. */
+export const revalidate = 300;
+
 export default function HomePage() {
   return (
     <div className="relative overflow-hidden">

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { ClientQuickAccess } from "@/components/client-quick-access";
 
+export const revalidate = 300;
+
 export default function ClientePage() {
   return (
     <div className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-2xl items-center px-4 py-16">

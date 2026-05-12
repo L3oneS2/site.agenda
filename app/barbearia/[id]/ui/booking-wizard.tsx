@@ -8,6 +8,7 @@ import {
   getDatesWithAvailability,
   getPublicSlots,
 } from "@/app/actions/booking";
+import { logClientDebug } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Service } from "@/lib/types";
@@ -68,24 +69,41 @@ export function BookingWizard({
     let cancelled = false;
     (async () => {
       setLoadingDates(true);
-      const r = await getDatesWithAvailability(
-        barbershopId,
-        service.duracao_minutos,
-        minDate,
-        28
-      );
-      if (cancelled) return;
-      setLoadingDates(false);
-      if (r.error) {
-        toast.error(r.error);
-        setAvailableDates(new Set());
-        return;
-      }
-      const next = new Set(r.dates ?? []);
-      setAvailableDates(next);
-      const sorted = [...next].sort();
-      if (sorted.length) {
-        setDate((prev) => (next.has(prev) ? prev : sorted[0]!));
+      try {
+        const r = await getDatesWithAvailability(
+          barbershopId,
+          service.duracao_minutos,
+          minDate,
+          28
+        );
+        if (cancelled) return;
+        if (r.error) {
+          toast.error(r.error);
+          setAvailableDates(new Set());
+          return;
+        }
+        logClientDebug("booking", "datas disponíveis", {
+          barbershopId,
+          serviceMin: service.duracao_minutos,
+          from: minDate,
+          count: r.dates?.length ?? 0,
+        });
+        const next = new Set(r.dates ?? []);
+        setAvailableDates(next);
+        const sorted = [...next].sort();
+        if (sorted.length) {
+          setDate((prev) => (next.has(prev) ? prev : sorted[0]!));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          logClientDebug("booking", "getDatesWithAvailability falhou", {
+            message: e instanceof Error ? e.message : String(e),
+          });
+          toast.error("Não foi possível carregar o calendário. Tente de novo em instantes.");
+          setAvailableDates(new Set());
+        }
+      } finally {
+        if (!cancelled) setLoadingDates(false);
       }
     })();
     return () => {
@@ -97,16 +115,31 @@ export function BookingWizard({
     async (d: string, svc: Service) => {
       setLoadingSlots(true);
       setHoraInicio(null);
-      const r = await getPublicSlots(barbershopId, d, svc.duracao_minutos);
-      setLoadingSlots(false);
-      if (r.error) {
-        toast.error(r.error);
+      try {
+        const r = await getPublicSlots(barbershopId, d, svc.duracao_minutos);
+        if (r.error) {
+          toast.error(r.error);
+          setSlots([]);
+          return;
+        }
+        logClientDebug("booking", "horários carregados", {
+          barbershopId,
+          data: d,
+          duracao: svc.duracao_minutos,
+          qtd: r.slots?.length ?? 0,
+        });
+        setSlots(r.slots ?? []);
+        if ((r.slots ?? []).length === 0) {
+          toast.message("Sem horários nesta data para este serviço.");
+        }
+      } catch (e) {
+        logClientDebug("booking", "getPublicSlots falhou", {
+          message: e instanceof Error ? e.message : String(e),
+        });
+        toast.error("Não foi possível carregar os horários.");
         setSlots([]);
-        return;
-      }
-      setSlots(r.slots ?? []);
-      if ((r.slots ?? []).length === 0) {
-        toast.message("Sem horários nesta data para este serviço.");
+      } finally {
+        setLoadingSlots(false);
       }
     },
     [barbershopId]
@@ -403,13 +436,22 @@ export function BookingWizard({
                 form.set("servico_id", service.id);
                 form.set("hora_inicio", horaInicio);
                 startTransition(async () => {
-                  const r = await bookPublicAppointment(form);
-                  if (r.error) toast.error(r.error);
-                  else {
-                    toast.success("Agendamento confirmado! Entraremos em contato.");
-                    setHoraInicio(null);
-                    setStep(1);
-                    setService(null);
+                  try {
+                    const r = await bookPublicAppointment(form);
+                    if (r.error) toast.error(r.error);
+                    else {
+                      toast.success("Agendamento confirmado! Entraremos em contato.");
+                      setHoraInicio(null);
+                      setStep(1);
+                      setService(null);
+                    }
+                  } catch (e) {
+                    logClientDebug("booking", "bookPublicAppointment falhou", {
+                      message: e instanceof Error ? e.message : String(e),
+                    });
+                    toast.error(
+                      "Não foi possível concluir o agendamento. Verifique a conexão e tente novamente."
+                    );
                   }
                 });
               }}

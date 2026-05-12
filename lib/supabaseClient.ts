@@ -1,6 +1,8 @@
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchWithTimeout } from "@/lib/fetch-with-timeout";
 import { getPublicSupabaseEnv } from "@/lib/supabase/public-env";
+import { logClientDebug } from "@/lib/supabase/debug-env";
 
 /**
  * Cliente Supabase **somente para o navegador** (componentes `"use client"`).
@@ -38,22 +40,19 @@ export function createClient(): SupabaseClient {
     global: {
       fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         try {
-          return await fetch(input as RequestInfo, init);
+          return await fetchWithTimeout(input as RequestInfo, init);
         } catch (err) {
-          if (process.env.NODE_ENV === "development") {
-            const target =
-              typeof input === "string"
-                ? input
-                : input instanceof Request
-                  ? input.url
-                  : String(input);
-            // eslint-disable-next-line no-console
-            console.error("[supabaseClient] fetch error", {
-              url: target,
-              cause: err instanceof Error ? err.cause : undefined,
-              message: err instanceof Error ? err.message : String(err),
-            });
-          }
+          const target =
+            typeof input === "string"
+              ? input
+              : input instanceof Request
+                ? input.url
+                : String(input);
+          logClientDebug("auth", "supabaseClient fetch error", {
+            url: target,
+            cause: err instanceof Error ? String(err.cause) : undefined,
+            message: err instanceof Error ? err.message : String(err),
+          });
           throw err;
         }
       },

@@ -266,13 +266,13 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'already_initialized', true);
   END IF;
 
+  -- Anti-fraude: só e-mail + telefone (hashes fortes). Device/IP compartilhavam
+  -- valores iguais (missing / 0.0.0.0/24) e bloqueavam todos após o 1º cadastro.
   IF EXISTS (
       SELECT 1
       FROM public.trial_identifier_claims c
       WHERE (c.kind = 'email' AND c.value_hash = p_email_hash)
          OR (c.kind = 'phone' AND c.value_hash = p_phone_hash)
-         OR (c.kind = 'device' AND c.value_hash = p_device_hash)
-         OR (c.kind = 'ip_subnet' AND c.value_hash = p_ip_subnet_hash)
     LIMIT 1
   ) THEN
     v_eligible := false;
@@ -317,9 +317,7 @@ BEGIN
     INSERT INTO public.trial_identifier_claims (kind, value_hash, user_id)
     VALUES
       ('email', p_email_hash, p_user_id),
-      ('phone', p_phone_hash, p_user_id),
-      ('device', p_device_hash, p_user_id),
-      ('ip_subnet', p_ip_subnet_hash, p_user_id);
+      ('phone', p_phone_hash, p_user_id);
   ELSE
     INSERT INTO public.subscriptions (
       user_id,

@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Inter } from "next/font/google";
-import { SiteHeader } from "@/components/site-header";
+import { SiteHeaderWithUser } from "@/components/site-header-with-user";
 import { Providers } from "@/components/providers";
-import { getSessionUser } from "@/lib/auth";
 import "./globals.css";
 
 const inter = Inter({
@@ -26,15 +25,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const user = await getSessionUser();
-
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${display.variable} min-h-screen font-sans`}
       >
         <Providers>
-          <SiteHeader userEmail={user?.email ?? null} />
+          <SiteHeaderWithUser />
           <main>{children}</main>
         </Providers>
       </body>

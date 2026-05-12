@@ -17,6 +17,17 @@ const dias = [
   "Sábado",
 ];
 
+/** Limite de janela + linhas para lista “Reservas futuras” (compatível com timeline por dia). */
+const AGENDA_FUTURE_DAYS = 120;
+const AGENDA_FUTURE_ROWS_CAP = 200;
+
+function addDaysToISODate(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
 export default async function AgendaPage() {
   const { user } = await requireBarber();
   const supabase = await tryCreateClient();
@@ -24,12 +35,13 @@ export default async function AgendaPage() {
 
   const { data: blocks } = await supabase
     .from("availability")
-    .select("*")
+    .select("id, user_id, dia_semana, hora_inicio, hora_fim, created_at")
     .eq("user_id", user.id)
     .order("dia_semana")
     .order("hora_inicio");
 
   const today = new Date().toISOString().slice(0, 10);
+  const futureUntil = addDaysToISODate(today, AGENDA_FUTURE_DAYS);
 
   const { data: appts } = await supabase
     .from("appointments")
@@ -39,9 +51,10 @@ export default async function AgendaPage() {
     .eq("barber_id", user.id)
     .eq("status", "scheduled")
     .gte("data", today)
+    .lte("data", futureUntil)
     .order("data", { ascending: true })
     .order("hora_inicio", { ascending: true })
-    .limit(400);
+    .limit(AGENDA_FUTURE_ROWS_CAP);
 
   const list = normalizeJoinedAppointments(appts) as Appointment[];
   const todayAppts = list.filter((a) => a.data === today);

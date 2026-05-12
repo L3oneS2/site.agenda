@@ -1,28 +1,51 @@
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type Stripe from "stripe";
-import { createAdminClient } from "@/lib/supabaseAdmin";
+import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
 import { getStripe } from "@/lib/stripe";
+import { logJsonLine } from "@/lib/supabase/debug-env";
 
 export const runtime = "nodejs";
 
+/**
+ * Webhook Stripe: validação por assinatura HMAC (`STRIPE_WEBHOOK_SECRET`); sem sessão de usuário.
+ * Sincroniza Supabase via service role quando configurada.
+ * Respostas JSON incluem `ok` + `received` + `error` (string em falhas de handler; 500 para Stripe retentar).
+ */
+function logStripeWebhook(phase: string, detail: Record<string, unknown> = {}) {
+  logJsonLine({ where: "stripe.webhook", phase, ...detail });
+}
+
 async function syncSubscriptionFromStripe(
+  admin: SupabaseClient,
   stripeSub: Stripe.Subscription,
   fallbackUserId?: string | null
-) {
-  const admin = createAdminClient();
+): Promise<void> {
   const userId =
     stripeSub.metadata?.supabase_user_id ?? fallbackUserId ?? null;
 
   if (!userId) {
-    console.error("Stripe subscription sem supabase_user_id", stripeSub.id);
+    logStripeWebhook("sync_skipped", {
+      reason: "missing_supabase_user_id",
+      stripeSubscriptionId: stripeSub.id,
+    });
     return;
   }
 
-  const { data: existing } = await admin
+  const { data: existing, error: existingErr } = await admin
     .from("subscriptions")
-    .select("trial_start_date,trial_end_date")
+    .select("trial_start_date, trial_end_date")
     .eq("user_id", userId)
     .maybeSingle();
+
+  if (existingErr) {
+    logStripeWebhook("subscription_select_failed", {
+      message: existingErr.message,
+      userId,
+      stripeSubscriptionId: stripeSub.id,
+    });
+    throw new Error(existingErr.message);
+  }
 
   const end = stripeSub.current_period_end
     ? new Date(stripeSub.current_period_end * 1000).toISOString()
@@ -74,14 +97,41 @@ async function syncSubscriptionFromStripe(
     { onConflict: "user_id" }
   );
 
-  if (error) console.error("Erro ao sincronizar assinatura:", error);
+  if (error) {
+    logStripeWebhook("subscription_upsert_failed", {
+      message: error.message,
+      userId,
+      stripeSubscriptionId: stripeSub.id,
+    });
+    throw new Error(error.message);
+  }
+}
+
+async function retrieveSubscriptionForWebhook(
+  stripe: Stripe,
+  subId: string
+): Promise<Stripe.Subscription> {
+  try {
+    return await stripe.subscriptions.retrieve(subId);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    const stripeErr = e as { type?: string; code?: string };
+    logStripeWebhook("stripe_subscriptions_retrieve_failed", {
+      subId,
+      message: msg,
+      stripeErrorType: stripeErr.type,
+      stripeErrorCode: stripeErr.code,
+    });
+    throw e;
+  }
 }
 
 export async function POST(request: Request) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) {
+    logStripeWebhook("misconfig", { reason: "STRIPE_WEBHOOK_SECRET ausente" });
     return NextResponse.json(
-      { error: "STRIPE_WEBHOOK_SECRET ausente" },
+      { ok: false, error: "STRIPE_WEBHOOK_SECRET ausente" },
       { status: 500 }
     );
   }
@@ -89,7 +139,15 @@ export async function POST(request: Request) {
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
   if (!signature) {
-    return NextResponse.json({ error: "Sem assinatura" }, { status: 400 });
+    return NextResponse.json({ ok: false, error: "Sem assinatura" }, { status: 400 });
+  }
+
+  if (!process.env.STRIPE_SECRET_KEY?.trim()) {
+    logStripeWebhook("misconfig", { reason: "STRIPE_SECRET_KEY ausente" });
+    return NextResponse.json(
+      { ok: false, error: "STRIPE_SECRET_KEY ausente no servidor" },
+      { status: 503 }
+    );
   }
 
   const stripe = getStripe();
@@ -99,7 +157,20 @@ export async function POST(request: Request) {
     event = stripe.webhooks.constructEvent(body, signature, secret);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Webhook inválido";
-    return NextResponse.json({ error: message }, { status: 400 });
+    logStripeWebhook("signature_invalid", { message });
+    return NextResponse.json({ ok: false, error: message }, { status: 400 });
+  }
+
+  const admin = tryCreateAdminClient();
+  if (!admin) {
+    logStripeWebhook("admin_missing", {
+      eventType: event.type,
+      eventId: event.id,
+    });
+    return NextResponse.json(
+      { ok: false, received: false, error: "SUPABASE_SERVICE_ROLE_KEY ausente" },
+      { status: 503 }
+    );
   }
 
   try {
@@ -107,33 +178,48 @@ export async function POST(request: Request) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.supabase_user_id;
-        if (session.mode !== "subscription" || !session.subscription) break;
+        if (session.mode !== "subscription" || !session.subscription) {
+          logStripeWebhook("checkout_ignored", {
+            mode: session.mode,
+            hasSubscription: Boolean(session.subscription),
+            sessionId: session.id,
+          });
+          break;
+        }
 
         const subId =
           typeof session.subscription === "string"
             ? session.subscription
             : session.subscription.id;
 
-        const stripeSub = await stripe.subscriptions.retrieve(subId);
-        await syncSubscriptionFromStripe(stripeSub, userId);
+        const stripeSub = await retrieveSubscriptionForWebhook(stripe, subId);
+        await syncSubscriptionFromStripe(admin, stripeSub, userId);
         break;
       }
       case "invoice.paid": {
         const invoice = event.data.object as Stripe.Invoice;
         const subRef = invoice.subscription;
-        if (!subRef) break;
+        if (!subRef) {
+          logStripeWebhook("invoice_paid_skipped", { reason: "no_subscription_on_invoice" });
+          break;
+        }
         const subId = typeof subRef === "string" ? subRef : subRef.id;
-        const stripeSub = await stripe.subscriptions.retrieve(subId);
-        await syncSubscriptionFromStripe(stripeSub);
+        const stripeSub = await retrieveSubscriptionForWebhook(stripe, subId);
+        await syncSubscriptionFromStripe(admin, stripeSub);
         break;
       }
       case "invoice.payment_failed": {
         const invoice = event.data.object as Stripe.Invoice;
         const subRef = invoice.subscription;
-        if (!subRef) break;
+        if (!subRef) {
+          logStripeWebhook("invoice_payment_failed_skipped", {
+            reason: "no_subscription_on_invoice",
+            invoiceId: invoice.id,
+          });
+          break;
+        }
         const subId = typeof subRef === "string" ? subRef : subRef.id;
-        const admin = createAdminClient();
-        await admin
+        const { error: updErr } = await admin
           .from("subscriptions")
           .update({
             status: "expired",
@@ -141,12 +227,18 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", subId);
+        if (updErr) {
+          logStripeWebhook("invoice_payment_failed_update", {
+            message: updErr.message,
+            stripeSubscriptionId: subId,
+          });
+          throw new Error(updErr.message);
+        }
         break;
       }
       case "customer.subscription.deleted": {
         const stripeSub = event.data.object as Stripe.Subscription;
-        const admin = createAdminClient();
-        await admin
+        const { error: delErr } = await admin
           .from("subscriptions")
           .update({
             status: "canceled",
@@ -154,15 +246,33 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           })
           .eq("stripe_subscription_id", stripeSub.id);
+        if (delErr) {
+          logStripeWebhook("subscription_deleted_update", {
+            message: delErr.message,
+            stripeSubscriptionId: stripeSub.id,
+          });
+          throw new Error(delErr.message);
+        }
         break;
       }
       default:
+        logStripeWebhook("event_unhandled", {
+          eventType: event.type,
+          eventId: event.id,
+        });
         break;
     }
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ received: true, error: true }, { status: 500 });
+    logStripeWebhook("handler_failed", {
+      eventType: event.type,
+      eventId: event.id,
+      message: e instanceof Error ? e.message : String(e),
+    });
+    return NextResponse.json(
+      { ok: false, received: true, error: "handler_failed" },
+      { status: 500 }
+    );
   }
 
-  return NextResponse.json({ received: true });
+  return NextResponse.json({ ok: true, received: true });
 }

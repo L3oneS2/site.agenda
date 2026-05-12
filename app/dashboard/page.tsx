@@ -16,6 +16,7 @@ import { TrialReminderBanner } from "@/components/trial-reminder-banner";
 import { CompleteBarbershopForm } from "@/app/dashboard/ui/complete-barbershop-form";
 import { ServicesManager } from "@/app/dashboard/ui/services-manager";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
+import { mapServiceRows } from "@/lib/map-service-row";
 import type { Appointment, Service, Subscription } from "@/lib/types";
 
 function subscriptionStatusLabel(sub: Subscription | null): string {
@@ -30,18 +31,6 @@ function subscriptionStatusLabel(sub: Subscription | null): string {
   }
   if (sub.account_blocked) return "Bloqueado — assine para continuar";
   return "Inativo";
-}
-
-function mapServiceRow(r: Record<string, unknown>): Service {
-  return {
-    id: String(r.id),
-    user_id: String(r.user_id),
-    nome: String(r.nome),
-    preco: Number(r.preco),
-    duracao_minutos: Number(r.duracao_minutos),
-    created_at: String(r.created_at),
-    updated_at: String(r.updated_at),
-  };
 }
 
 export default async function DashboardPage() {
@@ -71,13 +60,11 @@ export default async function DashboardPage() {
 
   const { data: rawServices } = await supabase
     .from("services")
-    .select("*")
+    .select("id, user_id, nome, preco, duracao_minutos, created_at, updated_at")
     .eq("user_id", user.id)
     .order("nome");
 
-  const serviceList = (rawServices ?? []).map((row) =>
-    mapServiceRow(row as Record<string, unknown>)
-  );
+  const serviceList = mapServiceRows(rawServices as unknown[] | null);
 
   const barbershop = shop;
   const rows = normalizeJoinedAppointments(upcoming) as Appointment[];

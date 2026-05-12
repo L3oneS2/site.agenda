@@ -1,3 +1,59 @@
+/** Áreas do app para logs opt-in (`DEBUG_APP=1` ou `NODE_ENV=development`). */
+export type AppDebugArea = "auth" | "booking" | "bootstrap" | "agenda";
+
+/**
+ * Uma linha JSON para logs operacionais (grep / agregadores). Evite colocar PII em `fields`.
+ */
+export function logJsonLine(fields: Record<string, unknown>): void {
+  // eslint-disable-next-line no-console
+  console.error(JSON.stringify({ t: new Date().toISOString(), ...fields }));
+}
+
+/**
+ * Log JSON único no servidor ou Edge (sem PII). Use para falhas de configuração em middleware.
+ */
+export function logGatewayError(where: string, message: string): void {
+  logJsonLine({ where, message });
+}
+
+/**
+ * Logs no browser: `NODE_ENV=development` ou `NEXT_PUBLIC_DEBUG_APP=1`.
+ * Preferir a `console.error` genérico em fluxos de UI para reduzir ruído em produção.
+ */
+export function logClientDebug(
+  area: AppDebugArea,
+  message: string,
+  detail?: Record<string, unknown>
+): void {
+  const enabled =
+    typeof process !== "undefined" &&
+    (process.env.NODE_ENV === "development" ||
+      process.env.NEXT_PUBLIC_DEBUG_APP === "1");
+  if (!enabled) return;
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[app-debug · ${area}]`,
+    message,
+    detail && Object.keys(detail).length > 0 ? detail : ""
+  );
+}
+
+/**
+ * Logs estruturados leves (auth / agendamento / trial / bootstrap).
+ * Ative `DEBUG_APP=1` em qualquer ambiente para ver no servidor ou no browser.
+ */
+export function logAppDebug(
+  area: AppDebugArea,
+  message: string,
+  detail?: Record<string, unknown>
+): void {
+  if (process.env.NODE_ENV !== "development" && process.env.DEBUG_APP !== "1") {
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log(`[app-debug · ${area}]`, message, detail && Object.keys(detail).length > 0 ? detail : "");
+}
+
 /**
  * Logs seguros para debug (apenas desenvolvimento). Nunca imprime a chave completa.
  */
