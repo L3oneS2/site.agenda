@@ -18,6 +18,9 @@ const display = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "CortePro — Agenda para barbearias",
   description: "Assinatura, agenda e agendamentos online para barbeiros.",
+  icons: {
+    icon: "/icon",
+  },
 };
 
 export default async function RootLayout({

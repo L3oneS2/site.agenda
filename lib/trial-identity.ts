@@ -6,7 +6,8 @@ let warnedShortTrialPepper = false;
  * Pepper secreto para hashes de trial (e-mail/telefone/dispositivo).
  *
  * - **Produção:** defina `TRIAL_IDENTITY_PEPPER` com alta entropia (ex.: `openssl rand -hex 32`).
- *   Sem isso, `getTrialIdentityPepper()` lança na primeira operação que calcular hash.
+ *   Sem isso, fluxos que chamam `hashTrialIdentifier` antes de validar devem usar
+ *   `trialIdentityPepperMissingMessage()` e retornar erro ao usuário em vez de lançar.
  * - **Desenvolvimento:** se ausente, usa placeholder fixo (nunca use isso em produção).
  */
 export function getTrialIdentityPepper(): string {
@@ -32,6 +33,21 @@ export function getTrialIdentityPepper(): string {
     );
   }
   return "__development_trial_pepper_change_me__";
+}
+
+/**
+ * Se produção estiver sem `TRIAL_IDENTITY_PEPPER`, retorna mensagem segura para o usuário;
+ * caso contrário `null` (pode prosseguir com os hashes).
+ */
+export function trialIdentityPepperMissingMessage(): string | null {
+  if (process.env.NODE_ENV !== "production") return null;
+  const p = process.env.TRIAL_IDENTITY_PEPPER?.trim();
+  if (p) return null;
+  return (
+    "O cadastro não pôde ser concluído no servidor: falta a variável TRIAL_IDENTITY_PEPPER " +
+    "(obrigatória em produção para anti-fraude). Quem administra o deploy deve definir um valor " +
+    "aleatório forte no host (ex.: Vercel → Environment Variables) e fazer redeploy."
+  );
 }
 
 export function hashTrialIdentifier(kind: string, normalized: string): string {

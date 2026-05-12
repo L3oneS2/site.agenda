@@ -115,8 +115,13 @@ export function RegisterForm() {
       logAppDebug("auth", "register exceção", {
         message: err instanceof Error ? err.message : String(err),
       });
-      const msg =
-        err instanceof Error
+      const genericProd =
+        err instanceof Error &&
+        err.message.includes("Server Components render") &&
+        err.message.includes("production builds");
+      const msg = genericProd
+        ? "O servidor não concluiu uma etapa do cadastro. Quem administra o deploy deve verificar os logs e variáveis (ex.: TRIAL_IDENTITY_PEPPER, SUPABASE_SERVICE_ROLE_KEY)."
+        : err instanceof Error
           ? err.message
           : "Falha de rede ao falar com o Supabase (fetch failed). Verifique a URL do projeto e sua conexão.";
       toast.error(msg);

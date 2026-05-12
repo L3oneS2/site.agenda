@@ -9,7 +9,7 @@ import { headers } from "next/headers";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
-import { logAppDebug } from "@/lib/supabase/debug-env";
+import { logAppDebug, logJsonLine } from "@/lib/supabase/debug-env";
 import {
   clientIpFromHeaders,
   coarseIpSubnetKey,
@@ -17,6 +17,7 @@ import {
   hashTrialIdentifier,
   normalizeDigits,
   normalizeSignupEmail,
+  trialIdentityPepperMissingMessage,
 } from "@/lib/trial-identity";
 
 const RATE_WINDOW_MS = 60 * 60 * 1000;
@@ -206,6 +207,15 @@ export async function finalizeBarberBootstrap(
 
   if (!nome_barbearia) {
     return { ok: false, error: "Informe o nome da barbearia." };
+  }
+
+  const pepperMissing = trialIdentityPepperMissingMessage();
+  if (pepperMissing) {
+    logJsonLine({
+      where: "finalizeBarberBootstrap",
+      phase: "trial_pepper_missing_production",
+    });
+    return { ok: false, error: pepperMissing };
   }
 
   const supabase = await createClient();
