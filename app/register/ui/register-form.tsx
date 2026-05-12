@@ -62,7 +62,6 @@ export function RegisterForm() {
 
       if (error) {
         logAuthError("register:signUp", error);
-        setLoading(false);
         toast.error(error.message);
         return;
       }
@@ -75,7 +74,6 @@ export function RegisterForm() {
 
       if (data.session && data.user) {
         const r = await finalizeBarberBootstrap(new FormData(form));
-        setLoading(false);
         if (!r.ok) {
           logAuthError("register:bootstrap", new Error(r.error ?? "bootstrap"));
           toast.error(r.error ?? "Falha ao finalizar cadastro.");
@@ -108,12 +106,13 @@ export function RegisterForm() {
       router.refresh();
     } catch (err) {
       logAuthError("register:signUp-exception", err);
-      setLoading(false);
       const msg =
         err instanceof Error
           ? err.message
           : "Falha de rede ao falar com o Supabase (fetch failed). Verifique a URL do projeto e sua conexão.";
       toast.error(msg);
+    } finally {
+      setLoading(false);
     }
   }
 

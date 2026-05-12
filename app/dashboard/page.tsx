@@ -19,7 +19,9 @@ import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import type { Appointment, Service, Subscription } from "@/lib/types";
 
 function subscriptionStatusLabel(sub: Subscription | null): string {
-  if (!sub) return "Configurando…";
+  if (!sub) {
+    return "Finalize o cadastro da barbearia abaixo para criar sua assinatura de teste.";
+  }
   if (isSubscriptionActive(sub)) return "Assinatura Stripe ativa";
   if (subscriptionAllowsFullAccess(sub) && sub.status === "trial") {
     const days = trialCalendarDaysRemainingUtc(sub.trial_end_date ?? null);

@@ -251,6 +251,12 @@ DECLARE
   v_start date;
   v_end date;
 BEGIN
+  IF auth.role() = 'authenticated' THEN
+    IF auth.uid() IS DISTINCT FROM p_user_id THEN
+      RETURN jsonb_build_object('ok', false, 'error', 'unauthorized');
+    END IF;
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.subscriptions x
@@ -357,6 +363,10 @@ REVOKE ALL ON FUNCTION public.finalize_barber_bootstrap (
 GRANT EXECUTE ON FUNCTION public.finalize_barber_bootstrap (
   uuid, text, text, text, text, text, text
 ) TO service_role;
+
+GRANT EXECUTE ON FUNCTION public.finalize_barber_bootstrap (
+  uuid, text, text, text, text, text, text
+) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.subscription_grants_public_access (public.subscriptions) FROM PUBLIC;
 
