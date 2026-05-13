@@ -5,11 +5,15 @@ import {
   subscriptionAllowsFullAccess,
 } from "@/lib/auth";
 import { getStripe } from "@/lib/stripe";
+import { logJsonLine } from "@/lib/supabase/debug-env";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "./ui/subscribe-button";
 
-/** Só exibição: lê o Price no Stripe (servidor). Sem isso, o card mostrava o texto fixo "Stripe". */
+/** Evita HTML estático com env do build; força leitura de `process.env` e Stripe em cada request. */
+export const dynamic = "force-dynamic";
+
+/** Só exibição: lê o Price no Stripe (servidor). */
 async function fetchStripeMonthlyPriceLabel(): Promise<string | null> {
   const priceId = process.env.STRIPE_PRICE_ID?.trim();
   const secret = process.env.STRIPE_SECRET_KEY?.trim();
@@ -17,14 +21,25 @@ async function fetchStripeMonthlyPriceLabel(): Promise<string | null> {
   try {
     const stripe = getStripe();
     const price = await stripe.prices.retrieve(priceId);
-    if (price.unit_amount == null) return null;
+    const minor =
+      price.unit_amount != null
+        ? price.unit_amount
+        : price.unit_amount_decimal != null
+          ? Number.parseFloat(price.unit_amount_decimal)
+          : Number.NaN;
+    if (!Number.isFinite(minor)) return null;
     const currency = (price.currency || "brl").toUpperCase();
-    const major = price.unit_amount / 100;
+    const major = minor / 100;
     return new Intl.NumberFormat("pt-BR", {
       style: "currency",
       currency,
     }).format(major);
-  } catch {
+  } catch (e) {
+    logJsonLine({
+      where: "assinatura.stripe_price_display",
+      phase: "retrieve_failed",
+      message: e instanceof Error ? e.message : String(e),
+    });
     return null;
   }
 }
@@ -40,8 +55,7 @@ export default async function AssinaturaPage({
   const sub = await getSubscription();
   const active = isSubscriptionActive(sub);
   const sp = await searchParams;
-  const priceOk = Boolean(process.env.STRIPE_PRICE_ID?.trim());
-  const monthlyPriceLabel = priceOk ? await fetchStripeMonthlyPriceLabel() : null;
+  const monthlyPriceLabel = await fetchStripeMonthlyPriceLabel();
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16">
@@ -81,13 +95,9 @@ export default async function AssinaturaPage({
           <div className="rounded-2xl border border-[var(--border)] bg-black/[0.02] p-6 text-center dark:bg-white/[0.04]">
             <p className="text-sm text-[var(--muted)]">A partir de</p>
             <p className="mt-1 font-display text-4xl font-bold text-gradient-gold">
-              {monthlyPriceLabel ? `${monthlyPriceLabel}/mês` : "Stripe"}
+              {monthlyPriceLabel ? `${monthlyPriceLabel}/mês` : "\u2014"}
             </p>
-            <p className="mt-1 text-xs text-[var(--muted)]">
-              {priceOk
-                ? "Pagamento seguro via Stripe"
-                : "Configure STRIPE_PRICE_ID com seu preço mensal"}
-            </p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Pagamento seguro via Stripe</p>
           </div>
         </div>
 
