@@ -7,6 +7,7 @@ import { CancelAppointmentButton, CopyAppointmentLinkButton } from "./ui/agenda-
 import { AgendaPlanner } from "./ui/agenda-planner";
 import { DayTimeline } from "./ui/day-timeline";
 import type { Appointment } from "@/lib/types";
+import { formatarDataBR } from "@/lib/formatar-data-br";
 
 /** Limite de janela + linhas para lista “Reservas futuras” (compatível com timeline por dia). */
 const AGENDA_FUTURE_DAYS = 120;
@@ -104,7 +105,7 @@ export default async function AgendaPage() {
                     <div>
                       <p className="font-medium">{a.cliente_nome}</p>
                       <p className="text-[var(--muted)]">
-                        {a.data} · {String(a.hora_inicio).slice(0, 5)} –{" "}
+                        {formatarDataBR(a.data)} · {String(a.hora_inicio).slice(0, 5)} –{" "}
                         {String(a.hora_fim).slice(0, 5)}
                         {svc ? ` · ${svc}` : ""}
                       </p>

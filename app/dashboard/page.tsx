@@ -18,6 +18,7 @@ import { ServicesManager } from "@/app/dashboard/ui/services-manager";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { mapServiceRows } from "@/lib/map-service-row";
 import type { Appointment, Service, Subscription } from "@/lib/types";
+import { formatarDataBR } from "@/lib/formatar-data-br";
 
 function subscriptionStatusLabel(sub: Subscription | null): string {
   if (!sub) {
@@ -157,7 +158,7 @@ export default async function DashboardPage() {
                   <div>
                     <p className="font-medium">{a.cliente_nome}</p>
                     <p className="text-[var(--muted)]">
-                      {a.data} · {String(a.hora_inicio).slice(0, 5)} –{" "}
+                      {formatarDataBR(a.data)} · {String(a.hora_inicio).slice(0, 5)} –{" "}
                       {String(a.hora_fim).slice(0, 5)}
                       {a.services &&
                       typeof a.services === "object" &&

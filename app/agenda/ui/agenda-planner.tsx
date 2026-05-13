@@ -19,6 +19,7 @@ import {
 import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { logJsonLine } from "@/lib/supabase/debug-env";
 import type { AgendaDayMarker, AgendaDaySlot } from "@/lib/types";
+import { formatarDataBR } from "@/lib/formatar-data-br";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -302,12 +303,7 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
 
       <div>
         <h3 className="text-sm font-semibold text-[var(--fg)]">
-          {new Date(selectedDate + "T12:00:00").toLocaleDateString("pt-BR", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
+          {formatarDataBR(selectedDate)}
         </h3>
         {markerForSelected === "none" ? (
           <p className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">

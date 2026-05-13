@@ -12,6 +12,7 @@ import { logClientDebug } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AgendaDayMarker, Service } from "@/lib/types";
+import { formatarDataBR } from "@/lib/formatar-data-br";
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
@@ -67,6 +68,7 @@ export function BookingWizard({
   const [confirmedLink, setConfirmedLink] = useState<{
     path: string;
     url?: string;
+    bookingDate: string;
   } | null>(null);
 
   useEffect(() => {
@@ -187,6 +189,9 @@ export function BookingWizard({
           <p className="mt-2 text-xs text-emerald-900/90 dark:text-emerald-100/90">
             Acesse os detalhes do seu agendamento quando quiser — guarde ou compartilhe o
             link abaixo (não é necessário criar conta).
+          </p>
+          <p className="mt-2 text-sm font-medium text-[var(--fg)]">
+            Data da reserva: {formatarDataBR(confirmedLink.bookingDate)}
           </p>
           <p className="mt-3 break-all rounded-xl bg-black/[0.06] px-3 py-2 font-mono text-xs text-[var(--fg)] dark:bg-white/10">
             {confirmedLink.url ??
@@ -442,12 +447,7 @@ export function BookingWizard({
             className="space-y-4"
           >
             <p className="text-sm text-[var(--muted)]">
-              {new Date(date + "T12:00:00").toLocaleDateString("pt-BR", {
-                weekday: "long",
-                day: "numeric",
-                month: "long",
-              })}{" "}
-              · {service.nome}
+              {formatarDataBR(date)} · {service.nome}
             </p>
             <p className="text-xs text-[var(--muted)]">
               <span className="mr-3 inline-flex items-center gap-1">
@@ -517,6 +517,7 @@ export function BookingWizard({
                           url:
                             r.appointmentUrl ??
                             (origin ? `${origin}${r.appointmentPath}` : undefined),
+                          bookingDate: date,
                         });
                         toast.success("Horário reservado com sucesso");
                         setHoraInicio(null);
@@ -535,8 +536,7 @@ export function BookingWizard({
                 }}
               >
                 <p className="text-sm text-[var(--muted)]">
-                  Resumo: {service.nome} ·{" "}
-                  {new Date(date + "T12:00:00").toLocaleDateString("pt-BR")} às{" "}
+                  Resumo: {service.nome} · {formatarDataBR(date)} às{" "}
                   {horaInicio.slice(0, 5)}
                 </p>
                 <Input name="cliente_nome" label="Seu nome" required autoComplete="name" />

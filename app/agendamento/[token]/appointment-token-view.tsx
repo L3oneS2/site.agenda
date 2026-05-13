@@ -5,6 +5,7 @@ import {
   fetchAppointmentByAccessToken,
   type PublicAppointmentByToken,
 } from "@/app/actions/appointment-public-token";
+import { formatarDataBR } from "@/lib/formatar-data-br";
 
 function statusPresentation(status: PublicAppointmentByToken["status"]) {
   switch (status) {
@@ -39,11 +40,7 @@ export function AppointmentTokenView({
   }, [refresh]);
 
   const st = statusPresentation(row.status);
-  const dataFmt = new Date(row.data + "T12:00:00").toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  const dataFmt = formatarDataBR(row.data);
 
   return (
     <article className="mx-auto max-w-md px-4 py-10">

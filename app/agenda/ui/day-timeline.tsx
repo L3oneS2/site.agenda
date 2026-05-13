@@ -7,6 +7,7 @@ import { CancelAppointmentButton } from "./agenda-client";
 import { logClientDebug, logJsonLine } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { timeStrToMinutes } from "@/lib/scheduling";
+import { formatarDataBR } from "@/lib/formatar-data-br";
 import type { Appointment } from "@/lib/types";
 
 const DAY_START_MIN = 7 * 60;
@@ -32,12 +33,7 @@ function serviceAccent(
 }
 
 function formatLabel(iso: string) {
-  return new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
+  return formatarDataBR(iso);
 }
 
 export function DayTimeline({
@@ -169,7 +165,7 @@ export function DayTimeline({
           </Button>
         </div>
       ) : null}
-      <p className="text-xs capitalize text-[var(--muted)]">{formatLabel(date)}</p>
+      <p className="text-xs text-[var(--muted)]">{formatLabel(date)}</p>
 
       <div className="relative flex gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 pl-2">
         <div
