@@ -124,13 +124,16 @@ CREATE TABLE IF NOT EXISTS public.appointments (
   servico_id UUID REFERENCES public.services (id) ON DELETE SET NULL,
   cliente_nome TEXT NOT NULL,
   cliente_telefone TEXT NOT NULL,
+  cliente_email TEXT,
   data DATE NOT NULL,
   hora_inicio TIME NOT NULL,
   hora_fim TIME NOT NULL,
   status public.appointment_status NOT NULL DEFAULT 'scheduled',
+  access_token UUID NOT NULL DEFAULT gen_random_uuid(),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT appointment_time_order CHECK (hora_fim > hora_inicio)
+  CONSTRAINT appointment_time_order CHECK (hora_fim > hora_inicio),
+  CONSTRAINT appointments_access_token_unique UNIQUE (access_token)
 );
 
 CREATE INDEX IF NOT EXISTS idx_appointments_barber_date ON public.appointments (barber_id, data);
@@ -535,4 +538,42 @@ CREATE POLICY "appointments_update_barber"
   USING (barber_id = auth.uid())
   WITH CHECK (barber_id = auth.uid());
 
--- Agendamentos: sem SELECT público — ocupação e reservas apenas via Server Actions com service role (lib/supabaseAdmin).
+-- Agendamentos: sem SELECT público direto em `appointments` — link por token via RPC `get_appointment_public_by_access_token`.
+-- Índice implícito: constraint UNIQUE(access_token) na tabela.
+
+CREATE OR REPLACE FUNCTION public.get_appointment_public_by_access_token (p_token uuid)
+RETURNS TABLE (
+  data date,
+  hora_inicio time,
+  hora_fim time,
+  cliente_nome text,
+  cliente_telefone text,
+  cliente_email text,
+  status public.appointment_status,
+  nome_barbearia text,
+  nome_servico text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    a.data,
+    a.hora_inicio,
+    a.hora_fim,
+    a.cliente_nome,
+    a.cliente_telefone,
+    a.cliente_email,
+    a.status,
+    b.nome_barbearia,
+    s.nome AS nome_servico
+  FROM public.appointments a
+  INNER JOIN public.barbershops b ON b.user_id = a.barber_id
+  LEFT JOIN public.services s ON s.id = a.servico_id
+  WHERE a.access_token = p_token
+  LIMIT 1;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_appointment_public_by_access_token (uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_appointment_public_by_access_token (uuid) TO anon, authenticated;

@@ -25,7 +25,7 @@ export function trialCalendarDaysRemainingUtc(
   return Math.round((d1 - d0) / 86400000) + 1;
 }
 
-/** Acesso completo ao painel / agenda: plano Stripe ativo ou trial válido sem bloqueio. */
+/** Acesso completo ao painel / agenda: alinhado a `public.subscription_grants_public_access` (schema.sql). */
 export function subscriptionAllowsFullAccess(
   sub: SubscriptionAccessFields | null
 ): boolean {

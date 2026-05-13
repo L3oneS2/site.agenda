@@ -82,46 +82,51 @@ export async function middleware(request: NextRequest) {
       .eq("id", user.id)
       .maybeSingle();
 
-    if (profile?.role === "barber") {
-      const billingOrSupport =
-        pathname.startsWith("/assinatura") || pathname.startsWith("/suporte");
-      const shopPromise = supabase
-        .from("barbershops")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const subPromise = billingOrSupport
-        ? Promise.resolve({ data: null as null })
-        : supabase
-            .from("subscriptions")
-            .select("status, current_period_end, trial_end_date, account_blocked")
-            .eq("user_id", user.id)
-            .maybeSingle();
+    if (profile?.role !== "barber") {
+      const home = request.nextUrl.clone();
+      home.pathname = "/";
+      home.search = "";
+      return NextResponse.redirect(home);
+    }
 
-      const [{ data: shop }, { data: sub }] = await Promise.all([shopPromise, subPromise]);
+    const billingOrSupport =
+      pathname.startsWith("/assinatura") || pathname.startsWith("/suporte");
+    const shopPromise = supabase
+      .from("barbershops")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const subPromise = billingOrSupport
+      ? Promise.resolve({ data: null as null })
+      : supabase
+          .from("subscriptions")
+          .select("status, current_period_end, trial_end_date, account_blocked")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-      const bootstrapping = !shop;
+    const [{ data: shop }, { data: sub }] = await Promise.all([shopPromise, subPromise]);
 
-      if (bootstrapping) {
-        if (pathname.startsWith("/agenda")) {
-          const u = request.nextUrl.clone();
-          u.pathname = "/dashboard";
-          return NextResponse.redirect(u);
-        }
-        return supabaseResponse;
-      }
+    const bootstrapping = !shop;
 
-      if (billingOrSupport) {
-        return supabaseResponse;
-      }
-
-      const access = subscriptionAllowsFullAccess(sub);
-      if (!access) {
+    if (bootstrapping) {
+      if (pathname.startsWith("/agenda")) {
         const u = request.nextUrl.clone();
-        u.pathname = "/assinatura";
-        u.searchParams.set("trial_expired", "1");
+        u.pathname = "/dashboard";
         return NextResponse.redirect(u);
       }
+      return supabaseResponse;
+    }
+
+    if (billingOrSupport) {
+      return supabaseResponse;
+    }
+
+    const access = subscriptionAllowsFullAccess(sub);
+    if (!access) {
+      const u = request.nextUrl.clone();
+      u.pathname = "/assinatura";
+      u.searchParams.set("trial_expired", "1");
+      return NextResponse.redirect(u);
     }
   }
 

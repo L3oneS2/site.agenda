@@ -62,6 +62,7 @@ export interface Appointment {
   servico_id: string | null;
   cliente_nome: string;
   cliente_telefone: string;
+  cliente_email?: string | null;
   data: string;
   hora_inicio: string;
   hora_fim: string;

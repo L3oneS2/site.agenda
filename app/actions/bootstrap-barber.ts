@@ -71,7 +71,31 @@ type RpcPayload = {
 } | null;
 
 function parseRpcResult(rpcRaw: unknown): RpcPayload {
-  return rpcRaw as RpcPayload;
+  if (rpcRaw === null || rpcRaw === undefined) return null;
+  if (typeof rpcRaw !== "object" || Array.isArray(rpcRaw)) return null;
+  const o = rpcRaw as Record<string, unknown>;
+  const ok = o.ok;
+  const already_initialized = o.already_initialized;
+  const trial_eligible = o.trial_eligible;
+  const error = o.error;
+  if (ok !== undefined && typeof ok !== "boolean") return null;
+  if (
+    already_initialized !== undefined &&
+    typeof already_initialized !== "boolean"
+  ) {
+    return null;
+  }
+  if (trial_eligible !== undefined && typeof trial_eligible !== "boolean") {
+    return null;
+  }
+  if (error !== undefined && typeof error !== "string") return null;
+  return {
+    ok: ok === undefined ? undefined : ok,
+    already_initialized:
+      already_initialized === undefined ? undefined : already_initialized,
+    trial_eligible: trial_eligible === undefined ? undefined : trial_eligible,
+    error: error === undefined ? undefined : error,
+  };
 }
 
 function friendlyRpcError(message: string): string {
@@ -209,6 +233,13 @@ export async function finalizeBarberBootstrap(
     return { ok: false, error: "Informe o nome da barbearia." };
   }
 
+  if (nome_barbearia.length > 200) {
+    return { ok: false, error: "Nome da barbearia muito longo (máx. 200 caracteres)." };
+  }
+
+  if (endereco.length > 500) {
+    return { ok: false, error: "Endereço muito longo (máx. 500 caracteres)." };
+  }
   const pepperMissing = trialIdentityPepperMissingMessage();
   if (pepperMissing) {
     logJsonLine({
@@ -262,6 +293,15 @@ export async function finalizeBarberBootstrap(
       endereco,
       deviceSignals
     );
+    logJsonLine({
+      where: "finalizeBarberBootstrap",
+      phase: result.ok ? "finalize_ok" : "finalize_error",
+      mode: "admin_service_role",
+      userIdPrefix: user.id.slice(0, 8),
+      alreadyInitialized: result.alreadyInitialized,
+      trialEligible: result.trialEligible,
+      error: result.error?.slice(0, 200),
+    });
     if (result.ok) {
       revalidatePath("/dashboard");
       revalidatePath("/assinatura");
@@ -291,6 +331,15 @@ export async function finalizeBarberBootstrap(
     endereco,
     deviceSignals
   );
+  logJsonLine({
+    where: "finalizeBarberBootstrap",
+    phase: result.ok ? "finalize_ok" : "finalize_error",
+    mode: "user_session_fallback",
+    userIdPrefix: user.id.slice(0, 8),
+    alreadyInitialized: result.alreadyInitialized,
+    trialEligible: result.trialEligible,
+    error: result.error?.slice(0, 200),
+  });
   if (result.ok) {
     revalidatePath("/dashboard");
     revalidatePath("/assinatura");

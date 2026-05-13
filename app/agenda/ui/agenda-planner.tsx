@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useTransition,
 } from "react";
@@ -16,6 +17,7 @@ import {
   listAgendaDaySlots,
 } from "@/app/actions/barber";
 import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { logJsonLine } from "@/lib/supabase/debug-env";
 import type { AgendaDayMarker, AgendaDaySlot } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,6 +53,9 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  const selectedDateRef = useRef(selectedDate);
+  selectedDateRef.current = selectedDate;
 
   const monthCells = useMemo(
     () => monthMatrix(calendarMonth.y, calendarMonth.m),
@@ -99,8 +104,23 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
     const supabase = createBrowserSupabase();
     if (!supabase) return;
 
+    const onAppointmentsChanged = () => {
+      void loadMarkers();
+      void loadSlots(selectedDateRef.current);
+      router.refresh();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("agenda:appointments-changed"));
+      }
+    };
+
+    const onSlotsChanged = () => {
+      void loadMarkers();
+      void loadSlots(selectedDateRef.current);
+      router.refresh();
+    };
+
     const ch = supabase
-      .channel(`agenda-sync-${barberUserId}`)
+      .channel(`agenda-planner-${barberUserId}`)
       .on(
         "postgres_changes",
         {
@@ -109,11 +129,7 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
           table: "appointments",
           filter: `barber_id=eq.${barberUserId}`,
         },
-        () => {
-          void loadMarkers();
-          void loadSlots(selectedDate);
-          router.refresh();
-        }
+        onAppointmentsChanged
       )
       .on(
         "postgres_changes",
@@ -123,18 +139,26 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
           table: "agenda_day_slots",
           filter: `user_id=eq.${barberUserId}`,
         },
-        () => {
-          void loadMarkers();
-          void loadSlots(selectedDate);
-          router.refresh();
-        }
+        onSlotsChanged
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          toast.error(
+            "Conexão em tempo real instável. Recarregue a página se os dados parecerem desatualizados."
+          );
+          logJsonLine({
+            where: "AgendaPlanner.realtime",
+            phase: "subscribe_status",
+            status,
+            message: err instanceof Error ? err.message : err ? String(err) : undefined,
+          });
+        }
+      });
 
     return () => {
       void supabase.removeChannel(ch);
     };
-  }, [barberUserId, selectedDate, loadMarkers, loadSlots, router]);
+  }, [barberUserId, loadMarkers, loadSlots, router]);
 
   async function onAddSlot(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

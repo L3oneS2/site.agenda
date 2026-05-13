@@ -16,13 +16,76 @@ function logStripeWebhook(phase: string, detail: Record<string, unknown> = {}) {
   logJsonLine({ where: "stripe.webhook", phase, ...detail });
 }
 
+async function resolveSupabaseUserIdForStripeSubscription(
+  admin: SupabaseClient,
+  stripe: Stripe,
+  stripeSub: Stripe.Subscription
+): Promise<string | null> {
+  const fromMeta = stripeSub.metadata?.supabase_user_id?.trim();
+  if (fromMeta) return fromMeta;
+
+  const { data: bySub, error: bySubErr } = await admin
+    .from("subscriptions")
+    .select("user_id")
+    .eq("stripe_subscription_id", stripeSub.id)
+    .maybeSingle();
+
+  if (bySubErr) {
+    logStripeWebhook("resolve_user_by_subscription_failed", {
+      message: bySubErr.message,
+      stripeSubscriptionId: stripeSub.id,
+    });
+  } else if (bySub?.user_id) {
+    return String(bySub.user_id);
+  }
+
+  const customerId =
+    typeof stripeSub.customer === "string"
+      ? stripeSub.customer
+      : stripeSub.customer?.id;
+
+  if (customerId) {
+    const { data: byCust, error: byCustErr } = await admin
+      .from("subscriptions")
+      .select("user_id")
+      .eq("stripe_customer_id", customerId)
+      .maybeSingle();
+
+    if (byCustErr) {
+      logStripeWebhook("resolve_user_by_customer_failed", {
+        message: byCustErr.message,
+        stripeCustomerId: customerId,
+      });
+    } else if (byCust?.user_id) {
+      return String(byCust.user_id);
+    }
+
+    try {
+      const cust = await stripe.customers.retrieve(customerId);
+      if (!cust.deleted && cust.metadata?.supabase_user_id?.trim()) {
+        return cust.metadata.supabase_user_id.trim();
+      }
+    } catch (e) {
+      logStripeWebhook("stripe_customers_retrieve_failed", {
+        customerId,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  return null;
+}
+
 async function syncSubscriptionFromStripe(
   admin: SupabaseClient,
+  stripe: Stripe,
   stripeSub: Stripe.Subscription,
   fallbackUserId?: string | null
 ): Promise<void> {
   const userId =
-    stripeSub.metadata?.supabase_user_id ?? fallbackUserId ?? null;
+    (await resolveSupabaseUserIdForStripeSubscription(admin, stripe, stripeSub)) ??
+    fallbackUserId ??
+    null;
 
   if (!userId) {
     logStripeWebhook("sync_skipped", {
@@ -177,7 +240,10 @@ export async function POST(request: Request) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.supabase_user_id;
+        const userId =
+          session.metadata?.supabase_user_id?.trim() ||
+          session.client_reference_id?.trim() ||
+          undefined;
         if (session.mode !== "subscription" || !session.subscription) {
           logStripeWebhook("checkout_ignored", {
             mode: session.mode,
@@ -193,7 +259,7 @@ export async function POST(request: Request) {
             : session.subscription.id;
 
         const stripeSub = await retrieveSubscriptionForWebhook(stripe, subId);
-        await syncSubscriptionFromStripe(admin, stripeSub, userId);
+        await syncSubscriptionFromStripe(admin, stripe, stripeSub, userId);
         break;
       }
       case "invoice.paid": {
@@ -205,7 +271,12 @@ export async function POST(request: Request) {
         }
         const subId = typeof subRef === "string" ? subRef : subRef.id;
         const stripeSub = await retrieveSubscriptionForWebhook(stripe, subId);
-        await syncSubscriptionFromStripe(admin, stripeSub);
+        await syncSubscriptionFromStripe(admin, stripe, stripeSub);
+        break;
+      }
+      case "customer.subscription.updated": {
+        const stripeSub = event.data.object as Stripe.Subscription;
+        await syncSubscriptionFromStripe(admin, stripe, stripeSub);
         break;
       }
       case "invoice.payment_failed": {
@@ -274,5 +345,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return NextResponse.json({ ok: true, received: true });
+  return NextResponse.json({ ok: true, received: true, eventId: event.id });
 }

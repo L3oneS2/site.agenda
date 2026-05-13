@@ -64,6 +64,10 @@ export function BookingWizard({
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [horaInicio, setHoraInicio] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [confirmedLink, setConfirmedLink] = useState<{
+    path: string;
+    url?: string;
+  } | null>(null);
 
   useEffect(() => {
     if (step !== 2 || !service) return;
@@ -177,6 +181,52 @@ export function BookingWizard({
 
   return (
     <div className="space-y-8">
+      {confirmedLink ? (
+        <div className="rounded-2xl border border-emerald-500/35 bg-emerald-500/10 p-4 text-sm text-emerald-950 dark:text-emerald-50">
+          <p className="font-semibold">Reserva confirmada</p>
+          <p className="mt-2 text-xs text-emerald-900/90 dark:text-emerald-100/90">
+            Acesse os detalhes do seu agendamento quando quiser — guarde ou compartilhe o
+            link abaixo (não é necessário criar conta).
+          </p>
+          <p className="mt-3 break-all rounded-xl bg-black/[0.06] px-3 py-2 font-mono text-xs text-[var(--fg)] dark:bg-white/10">
+            {confirmedLink.url ??
+              (typeof window !== "undefined"
+                ? `${window.location.origin}${confirmedLink.path}`
+                : confirmedLink.path)}
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="!py-2 !px-3 text-xs"
+              onClick={async () => {
+                const text =
+                  confirmedLink.url ??
+                  (typeof window !== "undefined"
+                    ? `${window.location.origin}${confirmedLink.path}`
+                    : confirmedLink.path);
+                try {
+                  await navigator.clipboard.writeText(text);
+                  toast.success("Link copiado");
+                } catch {
+                  toast.error("Não foi possível copiar o link.");
+                }
+              }}
+            >
+              Copiar link
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="!py-2 !px-3 text-xs"
+              onClick={() => setConfirmedLink(null)}
+            >
+              Fechar
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
       <nav aria-label="Etapas" className="flex flex-wrap gap-2 text-xs text-[var(--muted)]">
         {(
           [
@@ -459,7 +509,15 @@ export function BookingWizard({
                     try {
                       const r = await bookPublicAppointment(form);
                       if (r.error) toast.error(r.error);
-                      else {
+                      else if ("ok" in r && r.ok) {
+                        const origin =
+                          typeof window !== "undefined" ? window.location.origin : "";
+                        setConfirmedLink({
+                          path: r.appointmentPath,
+                          url:
+                            r.appointmentUrl ??
+                            (origin ? `${origin}${r.appointmentPath}` : undefined),
+                        });
                         toast.success("Horário reservado com sucesso");
                         setHoraInicio(null);
                         setStep(1);
@@ -482,6 +540,12 @@ export function BookingWizard({
                   {horaInicio.slice(0, 5)}
                 </p>
                 <Input name="cliente_nome" label="Seu nome" required autoComplete="name" />
+                <Input
+                  name="cliente_email"
+                  type="email"
+                  label="E-mail (opcional)"
+                  autoComplete="email"
+                />
                 <Input
                   name="cliente_telefone"
                   label="Telefone / WhatsApp"

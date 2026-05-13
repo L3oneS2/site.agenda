@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { requirePublicSupabaseEnv } from "@/lib/supabase/public-env";
+import { getPublicSupabaseEnv, requirePublicSupabaseEnv } from "@/lib/supabase/public-env";
 
 function normalizeEnvValue(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
@@ -9,6 +9,22 @@ function normalizeEnvValue(value: string | undefined): string | undefined {
 
 export function isServiceRoleKeyConfigured(): boolean {
   return Boolean(normalizeEnvValue(process.env.SUPABASE_SERVICE_ROLE_KEY));
+}
+
+/**
+ * Cliente **anon** (chave pública), sem sessão — só para leituras cobertas por RLS
+ * (`barbershops`, `services`, `agenda_day_slots` públicos). Não lê `appointments`
+ * (sem policy pública de SELECT).
+ */
+export function tryCreateAnonReadOnlyClient(): SupabaseClient | null {
+  const r = getPublicSupabaseEnv();
+  if (!r.ok) return null;
+  return createClient(r.url, r.anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
 /**

@@ -1,10 +1,9 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getBarberAppointmentsForDay } from "@/app/actions/barber";
-import { createBrowserSupabase } from "@/lib/supabase/browser";
+import { CancelAppointmentButton } from "./agenda-client";
 import { logClientDebug, logJsonLine } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { timeStrToMinutes } from "@/lib/scheduling";
@@ -44,7 +43,7 @@ function formatLabel(iso: string) {
 export function DayTimeline({
   initialDate,
   initialAppointments,
-  barberUserId,
+  barberUserId: _barberUserId,
 }: {
   initialDate: string;
   initialAppointments: Appointment[];
@@ -111,32 +110,21 @@ export function DayTimeline({
   }, [date, initialDate, loadDay]);
 
   useEffect(() => {
-    const supabase = createBrowserSupabase();
-    if (!supabase || !barberUserId) return;
+    if (date === initialDate) {
+      setRows(initialAppointments);
+    }
+  }, [date, initialDate, initialAppointments]);
 
-    const run = () => {
+  useEffect(() => {
+    const onRemoteAppointments = () => {
       const ac = new AbortController();
       void loadDay(ac.signal);
     };
-
-    const ch = supabase
-      .channel(`day-timeline-${barberUserId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "appointments",
-          filter: `barber_id=eq.${barberUserId}`,
-        },
-        run
-      )
-      .subscribe();
-
+    window.addEventListener("agenda:appointments-changed", onRemoteAppointments);
     return () => {
-      void supabase.removeChannel(ch);
+      window.removeEventListener("agenda:appointments-changed", onRemoteAppointments);
     };
-  }, [barberUserId, loadDay]);
+  }, [loadDay]);
 
   const ticks = useMemo(() => {
     const out: number[] = [];
@@ -232,13 +220,13 @@ export function DayTimeline({
             const visEnd = Math.min(end, DAY_END_MIN);
             if (visEnd <= visStart) return null;
             const top = (visStart - DAY_START_MIN) * pxPerMin;
-            const height = Math.max((visEnd - visStart) * pxPerMin, 20);
+            const height = Math.max((visEnd - visStart) * pxPerMin, 52);
             const accent = serviceAccent(a.servico_id);
             const svc = a.services;
             return (
               <div
                 key={a.id}
-                className="absolute left-2 right-2 overflow-hidden rounded-xl border-2 px-2 py-1.5 text-xs shadow-soft backdrop-blur-sm"
+                className="pointer-events-auto absolute left-2 right-2 overflow-y-auto rounded-xl border-2 px-2 py-1.5 text-xs shadow-soft backdrop-blur-sm"
                 style={{
                   top,
                   height,
@@ -253,9 +241,17 @@ export function DayTimeline({
                   {String(a.hora_inicio).slice(0, 5)} – {String(a.hora_fim).slice(0, 5)}
                   {svc?.nome ? ` · ${svc.nome}` : ""}
                 </p>
-                <span className="mt-0.5 inline-block rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-800 dark:bg-white/15 dark:text-gold-200">
-                  agendado
-                </span>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="inline-block rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-800 dark:bg-white/15 dark:text-gold-200">
+                    confirmado
+                  </span>
+                  {a.status === "scheduled" ? (
+                    <CancelAppointmentButton
+                      id={a.id}
+                      className="!py-1 !px-2 text-[10px] font-medium"
+                    />
+                  ) : null}
+                </div>
               </div>
             );
           })}

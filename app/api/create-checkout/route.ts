@@ -4,6 +4,23 @@ import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
 import { getStripe } from "@/lib/stripe";
 import { logJsonLine } from "@/lib/supabase/debug-env";
 
+/** URLs de retorno só com origem configurada ou a do próprio request — nunca `Origin` do cliente em isolamento. */
+function trustedCheckoutOrigin(request: Request): string {
+  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (fromEnv) {
+    try {
+      return new URL(fromEnv).origin;
+    } catch {
+      logJsonLine({
+        where: "api.create-checkout",
+        phase: "invalid_NEXT_PUBLIC_APP_URL",
+        message: fromEnv.slice(0, 120),
+      });
+    }
+  }
+  return new URL(request.url).origin;
+}
+
 /**
  * Checkout Stripe autenticado por **sessão Supabase** (cookies), igual às páginas protegidas do App Router.
  * Não depende do middleware para validar usuário em `/api/*` — o handler chama `getUser()` explicitamente.
@@ -40,10 +57,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Não autorizado" }, { status: 401 });
   }
 
-  const origin =
-    request.headers.get("origin") ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    new URL(request.url).origin;
+  const origin = trustedCheckoutOrigin(request);
 
   const admin = tryCreateAdminClient();
   if (!admin) {
@@ -109,6 +123,7 @@ export async function POST(request: Request) {
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${origin}/sucesso?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/erro`,
+    client_reference_id: user.id,
     metadata: { supabase_user_id: user.id },
     subscription_data: {
       metadata: { supabase_user_id: user.id },

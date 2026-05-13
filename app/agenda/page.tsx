@@ -3,7 +3,7 @@ import { tryCreateClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { Card } from "@/components/ui/card";
-import { CancelAppointmentButton } from "./ui/agenda-client";
+import { CancelAppointmentButton, CopyAppointmentLinkButton } from "./ui/agenda-client";
 import { AgendaPlanner } from "./ui/agenda-planner";
 import { DayTimeline } from "./ui/day-timeline";
 import type { Appointment } from "@/lib/types";
@@ -116,7 +116,12 @@ export default async function AgendaPage() {
                         {scheduled ? "Confirmado" : "Cancelado"}
                       </p>
                     </div>
-                    {scheduled ? <CancelAppointmentButton id={a.id} /> : null}
+                    {scheduled ? (
+                      <div className="flex flex-wrap gap-2">
+                        <CopyAppointmentLinkButton appointmentId={a.id} />
+                        <CancelAppointmentButton id={a.id} />
+                      </div>
+                    ) : null}
                   </li>
                 );
               })

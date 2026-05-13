@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
 import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
+import { appointmentPublicUrl } from "@/lib/public-app-url";
 import { logJsonLine } from "@/lib/supabase/debug-env";
 import {
   bookedRowsToIntervals,
@@ -190,23 +191,92 @@ export async function getBarberAgendaMonthMarkers(
   return { markers };
 }
 
-export async function cancelAppointment(id: string) {
+const APPOINTMENT_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * Cancelamento pelo barbeiro: `scheduled` → `canceled`.
+ * Disponibilidade pública deriva de `appointments` agendados (não há `agenda_bookings` nem `is_available` em `agenda_day_slots`).
+ * Um único `UPDATE` com filtros em linha é atómico no Postgres.
+ */
+export async function cancelBarberAppointment(appointmentId: string) {
   const { user } = await requireBarber();
   const denied = await barberWriteDeniedMessage();
   if (denied) return { error: denied };
+
+  if (!APPOINTMENT_ID_RE.test(appointmentId)) {
+    return { error: "Identificador do agendamento inválido." };
+  }
+
   const supabase = await createClient();
-  const { error } = await supabase
+
+  const { data: updated, error } = await supabase
     .from("appointments")
     .update({ status: "canceled" })
-    .eq("id", id)
-    .eq("barber_id", user.id);
+    .eq("id", appointmentId)
+    .eq("barber_id", user.id)
+    .eq("status", "scheduled")
+    .select("id")
+    .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error) {
+    logJsonLine({
+      where: "cancelBarberAppointment",
+      code: error.code,
+      message: error.message,
+    });
+    return { error: error.message };
+  }
+
+  if (!updated) {
+    return {
+      error:
+        "Agendamento não encontrado, já cancelado ou não pertence à sua conta.",
+    };
+  }
 
   revalidatePath("/dashboard");
   revalidatePath("/agenda");
   await revalidatePublicBarbershopPage(supabase, user.id);
-  return { ok: true };
+  return { ok: true as const };
+}
+
+/** Alias estável para chamadas existentes. */
+export async function cancelAppointment(id: string) {
+  return cancelBarberAppointment(id);
+}
+
+/** Link público do agendamento (token) para o barbeiro copiar e enviar ao cliente. */
+export async function getBarberAppointmentPublicLink(appointmentId: string) {
+  const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
+
+  if (!APPOINTMENT_ID_RE.test(appointmentId)) {
+    return { error: "Identificador inválido." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("access_token")
+    .eq("id", appointmentId)
+    .eq("barber_id", user.id)
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+
+  const token = data?.access_token as string | undefined;
+  if (!token) {
+    return {
+      error:
+        "Link ainda não disponível para este registro. Confirme se a migração `access_token` foi aplicada no Supabase.",
+    };
+  }
+
+  const path = `/agendamento/${token}`;
+  const url = appointmentPublicUrl(token);
+  return { path, fullUrl: url };
 }
 
 export async function getBarberAppointmentsForDay(
