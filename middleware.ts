@@ -59,6 +59,12 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
+  /* `/agendamento` ≠ `/agenda`, mas `startsWith("/agenda")` captura o prefixo de `/agendamento/...`. */
+  if (pathname.startsWith("/agendamento")) {
+    return supabaseResponse;
+  }
+
   const isProtected = protectedPrefixes.some((p) => pathname.startsWith(p));
 
   if (isProtected && !user) {
