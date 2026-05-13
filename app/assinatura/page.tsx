@@ -4,9 +4,30 @@ import {
   isSubscriptionActive,
   subscriptionAllowsFullAccess,
 } from "@/lib/auth";
+import { getStripe } from "@/lib/stripe";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { SubscribeButton } from "./ui/subscribe-button";
+
+/** Só exibição: lê o Price no Stripe (servidor). Sem isso, o card mostrava o texto fixo "Stripe". */
+async function fetchStripeMonthlyPriceLabel(): Promise<string | null> {
+  const priceId = process.env.STRIPE_PRICE_ID?.trim();
+  const secret = process.env.STRIPE_SECRET_KEY?.trim();
+  if (!priceId || !secret) return null;
+  try {
+    const stripe = getStripe();
+    const price = await stripe.prices.retrieve(priceId);
+    if (price.unit_amount == null) return null;
+    const currency = (price.currency || "brl").toUpperCase();
+    const major = price.unit_amount / 100;
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency,
+    }).format(major);
+  } catch {
+    return null;
+  }
+}
 
 const TRIAL_PAYWALL =
   "Seu período de teste expirou. Assine um plano para continuar utilizando o sistema.";
@@ -20,6 +41,7 @@ export default async function AssinaturaPage({
   const active = isSubscriptionActive(sub);
   const sp = await searchParams;
   const priceOk = Boolean(process.env.STRIPE_PRICE_ID?.trim());
+  const monthlyPriceLabel = priceOk ? await fetchStripeMonthlyPriceLabel() : null;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16">
@@ -59,7 +81,7 @@ export default async function AssinaturaPage({
           <div className="rounded-2xl border border-[var(--border)] bg-black/[0.02] p-6 text-center dark:bg-white/[0.04]">
             <p className="text-sm text-[var(--muted)]">A partir de</p>
             <p className="mt-1 font-display text-4xl font-bold text-gradient-gold">
-              Stripe
+              {monthlyPriceLabel ? `${monthlyPriceLabel}/mês` : "Stripe"}
             </p>
             <p className="mt-1 text-xs text-[var(--muted)]">
               {priceOk
