@@ -10,6 +10,7 @@ import { logJsonLine } from "@/lib/supabase/debug-env";
 import {
   bookedRowsToIntervals,
   discreteSlotsFreeAndBlocked,
+  normalizeIsoDateFromDb,
   normalizeTimeInput,
 } from "@/lib/scheduling";
 import type { AgendaDayMarker, AgendaDaySlot, Appointment } from "@/lib/types";
@@ -154,7 +155,7 @@ export async function getBarberAgendaMonthMarkers(
 
   const slotsByDate = new Map<string, string[]>();
   for (const row of slotRows ?? []) {
-    const d = String((row as { data: string }).data);
+    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
     const h = normalizeTimeInput(String((row as { hora: string }).hora));
     const list = slotsByDate.get(d);
     if (list) list.push(h);
@@ -163,7 +164,7 @@ export async function getBarberAgendaMonthMarkers(
 
   const apptsByDate = new Map<string, { hora_inicio: string; hora_fim: string }[]>();
   for (const row of apptRows ?? []) {
-    const d = String((row as { data: string }).data);
+    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
     const slice = {
       hora_inicio: String((row as { hora_inicio: string }).hora_inicio),
       hora_fim: String((row as { hora_fim: string }).hora_fim),

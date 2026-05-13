@@ -17,6 +17,7 @@ import {
   discreteSlotsFreeAndBlocked,
   hasOverlapWithBooked,
   normalizeTimeInput,
+  normalizeIsoDateFromDb,
   timeStrToMinutes,
 } from "@/lib/scheduling";
 import { mapServiceRows } from "@/lib/map-service-row";
@@ -268,7 +269,7 @@ export async function getPublicMonthDayMarkers(
 
   const slotsByDate = new Map<string, string[]>();
   for (const row of slotRows ?? []) {
-    const d = String((row as { data: string }).data);
+    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
     const h = normalizeTimeInput(String((row as { hora: string }).hora));
     const list = slotsByDate.get(d);
     if (list) list.push(h);
@@ -277,7 +278,7 @@ export async function getPublicMonthDayMarkers(
 
   const apptsByDate = new Map<string, { hora_inicio: string; hora_fim: string }[]>();
   for (const row of apptRows ?? []) {
-    const d = String((row as { data: string }).data);
+    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
     const slice = {
       hora_inicio: String((row as { hora_inicio: string }).hora_inicio),
       hora_fim: String((row as { hora_fim: string }).hora_fim),
@@ -370,7 +371,7 @@ export async function getDatesWithAvailability(
 
   const slotsByDate = new Map<string, string[]>();
   for (const row of slotRows ?? []) {
-    const d = String((row as { data: string }).data);
+    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
     const h = normalizeTimeInput(String((row as { hora: string }).hora));
     const list = slotsByDate.get(d);
     if (list) list.push(h);
@@ -379,7 +380,7 @@ export async function getDatesWithAvailability(
 
   const byDate = new Map<string, { hora_inicio: string; hora_fim: string }[]>();
   for (const row of appointments ?? []) {
-    const d = String((row as { data: string }).data);
+    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
     const list = byDate.get(d);
     const slice = {
       hora_inicio: String((row as { hora_inicio: string }).hora_inicio),

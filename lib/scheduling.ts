@@ -18,6 +18,13 @@ export function normalizeTimeInput(t: string): string {
   return t;
 }
 
+/** Normaliza `date` / `timestamptz` do Postgres para `YYYY-MM-DD` (chaves do calendário e filtros). */
+export function normalizeIsoDateFromDb(value: unknown): string {
+  const s = String(value ?? "");
+  const m = /^(\d{4}-\d{2}-\d{2})/.exec(s);
+  return m ? m[1]! : s.slice(0, 10);
+}
+
 /** Soma minutos a um horário HH:MM ou HH:MM:SS (sem cruzar meia-noite). */
 export function addMinutesToTimeStr(start: string, add: number): string {
   const m = timeStrToMinutes(start) + add;

@@ -47,14 +47,35 @@ export function LoginForm({ redirectTo }: { redirectTo?: string }) {
         return;
       }
 
+      const {
+        data: { user: signedUser },
+      } = await supabase.auth.getUser();
+      if (!signedUser?.id) {
+        toast.error("Sessão não criada. Tente novamente.");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", signedUser.id)
+        .maybeSingle();
+
       toast.success("Bem-vindo de volta!");
-      const safe =
+
+      const safeRedirect =
         redirectTo &&
         redirectTo.startsWith("/") &&
         !redirectTo.startsWith("//")
           ? redirectTo
-          : "/dashboard";
-      router.push(safe);
+          : null;
+
+      const dest =
+        profile?.role === "barber"
+          ? safeRedirect ?? "/dashboard"
+          : "/cliente";
+
+      router.push(dest);
       router.refresh();
     } catch (err) {
       logAuthError("login:signIn-exception", err);
