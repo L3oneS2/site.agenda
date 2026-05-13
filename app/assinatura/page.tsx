@@ -19,6 +19,7 @@ export default async function AssinaturaPage({
   const sub = await getSubscription();
   const active = isSubscriptionActive(sub);
   const sp = await searchParams;
+  const priceOk = Boolean(process.env.STRIPE_PRICE_ID?.trim());
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-16">
@@ -61,7 +62,9 @@ export default async function AssinaturaPage({
               Stripe
             </p>
             <p className="mt-1 text-xs text-[var(--muted)]">
-              Configure STRIPE_PRICE_ID com seu preço mensal
+              {priceOk
+                ? "Pagamento seguro via Stripe"
+                : "Configure STRIPE_PRICE_ID com seu preço mensal"}
             </p>
           </div>
         </div>
