@@ -5,13 +5,13 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { toast } from "sonner";
 import {
   bookPublicAppointment,
-  getDatesWithAvailability,
+  getPublicMonthDayMarkers,
   getPublicSlots,
 } from "@/app/actions/booking";
 import { logClientDebug } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { Service } from "@/lib/types";
+import type { AgendaDayMarker, Service } from "@/lib/types";
 
 function todayISODate() {
   return new Date().toISOString().slice(0, 10);
@@ -40,7 +40,7 @@ const brl = new Intl.NumberFormat("pt-BR", {
   currency: "BRL",
 });
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2 | 3;
 
 export function BookingWizard({
   barbershopId,
@@ -52,14 +52,15 @@ export function BookingWizard({
   const minDate = useMemo(() => todayISODate(), []);
   const [step, setStep] = useState<Step>(1);
   const [service, setService] = useState<Service | null>(null);
-  const [availableDates, setAvailableDates] = useState<Set<string>>(new Set());
-  const [loadingDates, setLoadingDates] = useState(false);
+  const [dayMarkers, setDayMarkers] = useState<Record<string, AgendaDayMarker>>({});
+  const [loadingMarkers, setLoadingMarkers] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const t = new Date();
     return { y: t.getFullYear(), m: t.getMonth() };
   });
   const [date, setDate] = useState<string>(minDate);
   const [slots, setSlots] = useState<string[]>([]);
+  const [definedOrder, setDefinedOrder] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [horaInicio, setHoraInicio] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -68,48 +69,52 @@ export function BookingWizard({
     if (step !== 2 || !service) return;
     let cancelled = false;
     (async () => {
-      setLoadingDates(true);
+      setLoadingMarkers(true);
       try {
-        const r = await getDatesWithAvailability(
+        const r = await getPublicMonthDayMarkers(
           barbershopId,
           service.duracao_minutos,
-          minDate,
-          28
+          calendarMonth.y,
+          calendarMonth.m
         );
         if (cancelled) return;
         if (r.error) {
           toast.error(r.error);
-          setAvailableDates(new Set());
+          setDayMarkers({});
           return;
         }
-        logClientDebug("booking", "datas disponíveis", {
+        logClientDebug("booking", "marcadores do mês", {
           barbershopId,
-          serviceMin: service.duracao_minutos,
-          from: minDate,
-          count: r.dates?.length ?? 0,
+          y: calendarMonth.y,
+          m: calendarMonth.m,
+          keys: Object.keys(r.markers ?? {}).length,
         });
-        const next = new Set(r.dates ?? []);
-        setAvailableDates(next);
-        const sorted = [...next].sort();
-        if (sorted.length) {
-          setDate((prev) => (next.has(prev) ? prev : sorted[0]!));
+        setDayMarkers(r.markers ?? {});
+        const opens = Object.entries(r.markers ?? {}).filter(([, v]) => v === "open");
+        opens.sort(([a], [b]) => a.localeCompare(b));
+        if (opens.length) {
+          const firstOpen = opens[0]![0];
+          setDate((prev) => {
+            const m = r.markers?.[prev];
+            return m === "open" ? prev : firstOpen;
+          });
         }
       } catch (e) {
         if (!cancelled) {
-          logClientDebug("booking", "getDatesWithAvailability falhou", {
+          logClientDebug("booking", "getPublicMonthDayMarkers falhou", {
             message: e instanceof Error ? e.message : String(e),
           });
           toast.error("Não foi possível carregar o calendário. Tente de novo em instantes.");
-          setAvailableDates(new Set());
+          setDayMarkers({});
         }
       } finally {
-        if (!cancelled) setLoadingDates(false);
+        if (!cancelled) setLoadingMarkers(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [step, service, barbershopId, minDate]);
+  }, [step, service, barbershopId, calendarMonth.y, calendarMonth.m]);
 
   const loadSlots = useCallback(
     async (d: string, svc: Service) => {
@@ -120,24 +125,25 @@ export function BookingWizard({
         if (r.error) {
           toast.error(r.error);
           setSlots([]);
+          setDefinedOrder([]);
           return;
         }
         logClientDebug("booking", "horários carregados", {
           barbershopId,
           data: d,
           duracao: svc.duracao_minutos,
-          qtd: r.slots?.length ?? 0,
+          livres: r.slots?.length ?? 0,
+          ocupados: r.occupied?.length ?? 0,
         });
         setSlots(r.slots ?? []);
-        if ((r.slots ?? []).length === 0) {
-          toast.message("Sem horários nesta data para este serviço.");
-        }
+        setDefinedOrder(r.defined ?? []);
       } catch (e) {
         logClientDebug("booking", "getPublicSlots falhou", {
           message: e instanceof Error ? e.message : String(e),
         });
         toast.error("Não foi possível carregar os horários.");
         setSlots([]);
+        setDefinedOrder([]);
       } finally {
         setLoadingSlots(false);
       }
@@ -146,7 +152,7 @@ export function BookingWizard({
   );
 
   useEffect(() => {
-    if (step >= 3 && service && date) {
+    if (step === 3 && service && date) {
       void loadSlots(date, service);
     }
   }, [step, service, date, loadSlots]);
@@ -154,6 +160,11 @@ export function BookingWizard({
   const monthCells = useMemo(
     () => monthMatrix(calendarMonth.y, calendarMonth.m),
     [calendarMonth.y, calendarMonth.m]
+  );
+
+  const monthHasAnyOpen = useMemo(
+    () => Object.values(dayMarkers).some((v) => v === "open"),
+    [dayMarkers]
   );
 
   if (services.length === 0) {
@@ -171,8 +182,7 @@ export function BookingWizard({
           [
             [1, "Serviço"],
             [2, "Data"],
-            [3, "Horário"],
-            [4, "Seus dados"],
+            [3, "Horário e confirmação"],
           ] as const
         ).map(([n, label]) => (
           <span
@@ -201,7 +211,8 @@ export function BookingWizard({
             className="space-y-4"
           >
             <p className="text-sm text-[var(--muted)]">
-              Selecione o serviço. A duração define os horários disponíveis.
+              Selecione o serviço. Os horários exibidos são os cadastrados pelo barbeiro
+              para cada data.
             </p>
             <ul className="grid gap-3 sm:grid-cols-2">
               {services.map((s) => {
@@ -251,13 +262,11 @@ export function BookingWizard({
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-[var(--muted)]">
-                Só aparecem dias com espaço para{" "}
-                <strong className="text-[var(--fg)]">
-                  {service.duracao_minutos} min
-                </strong>
-                .
+                Verde: horários livres para{" "}
+                <strong className="text-[var(--fg)]">{service.duracao_minutos} min</strong>.
+                Vermelho: cadastrado, mas ocupado. Cinza: sem horários nesta data.
               </p>
-              {loadingDates ? (
+              {loadingMarkers ? (
                 <span className="text-xs text-[var(--muted)]">Carregando…</span>
               ) : null}
             </div>
@@ -312,32 +321,47 @@ export function BookingWizard({
                   }
                   const iso = toISO(calendarMonth.y, calendarMonth.m, cell.day);
                   const isPast = iso < minDate;
-                  const hasSlot = availableDates.has(iso);
+                  const marker = dayMarkers[iso] ?? "none";
                   const isSelected = date === iso;
                   return (
                     <button
                       key={iso}
                       type="button"
-                      disabled={isPast || !hasSlot || loadingDates}
+                      disabled={isPast || loadingMarkers}
                       title={
                         isPast
                           ? "Data passada"
-                          : !hasSlot
-                            ? "Indisponível"
-                            : "Disponível"
+                          : marker === "open"
+                            ? "Horários livres"
+                            : marker === "full"
+                              ? "Horários ocupados"
+                              : "Sem horários cadastrados"
                       }
                       onClick={() => {
+                        if (isPast) return;
+                        if (marker === "none") {
+                          toast.message("Esta data não tem horários configurados pela barbearia.");
+                          return;
+                        }
+                        if (marker === "full") {
+                          toast.message("Todos os horários estão ocupados nesta data.");
+                          return;
+                        }
                         setDate(iso);
                         setStep(3);
                       }}
                       className={`aspect-square rounded-xl text-sm font-medium transition ${
                         isSelected
-                          ? "bg-gold-500 text-white shadow-gold"
-                          : hasSlot && !isPast
-                            ? "bg-gold-500/15 text-[var(--fg)] hover:bg-gold-500/25"
-                            : isPast
-                              ? "cursor-not-allowed text-[var(--muted)] opacity-40"
-                              : "cursor-not-allowed text-[var(--muted)] opacity-35"
+                          ? "ring-2 ring-gold-500 ring-offset-2 ring-offset-[var(--card)]"
+                          : ""
+                      } ${
+                        isPast
+                          ? "cursor-not-allowed text-[var(--muted)] opacity-40"
+                          : marker === "open"
+                            ? "bg-emerald-500/15 text-[var(--fg)] hover:bg-emerald-500/25"
+                            : marker === "full"
+                              ? "bg-red-500/15 text-[var(--fg)] hover:bg-red-500/20"
+                              : "text-[var(--muted)] opacity-60 hover:opacity-90"
                       }`}
                     >
                       {cell.day}
@@ -346,10 +370,10 @@ export function BookingWizard({
                 })}
               </div>
             </div>
-            {!loadingDates && availableDates.size === 0 ? (
+            {!loadingMarkers && !monthHasAnyOpen ? (
               <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
-                Nenhum dia com horário livre nos próximos 28 dias para este serviço.
-                Tente outro ou fale com a barbearia.
+                Nenhum dia com horário livre neste mês para este serviço. Tente outro mês
+                ou outro serviço.
               </p>
             ) : null}
             <Button type="button" variant="outline" onClick={() => setStep(1)}>
@@ -375,108 +399,113 @@ export function BookingWizard({
               })}{" "}
               · {service.nome}
             </p>
+            <p className="text-xs text-[var(--muted)]">
+              <span className="mr-3 inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" /> disponível
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-full bg-red-500" /> ocupado
+              </span>
+            </p>
             {loadingSlots ? (
               <p className="text-sm text-[var(--muted)]">Carregando horários…</p>
-            ) : slots.length === 0 ? (
+            ) : definedOrder.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">
-                Nenhum horário livre. Escolha outra data.
+                Nenhum horário cadastrado para esta data. Escolha outra no calendário.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {slots.map((s) => {
-                  const label = s.slice(0, 5);
-                  const active = horaInicio === s;
+                {definedOrder.map((t) => {
+                  const livre = slots.includes(t);
+                  const label = t.slice(0, 5);
+                  const active = horaInicio === t;
                   return (
                     <button
-                      key={s}
+                      key={t}
                       type="button"
-                      onClick={() => setHoraInicio(s)}
+                      disabled={!livre}
+                      onClick={() => livre && setHoraInicio(t)}
                       className={`rounded-2xl border px-4 py-2 text-sm transition ${
-                        active
-                          ? "border-gold-500 bg-gold-500/10 text-[var(--fg)] shadow-gold"
-                          : "border-[var(--border)] hover:border-gold-500/40"
+                        !livre
+                          ? "cursor-not-allowed border-red-500/40 bg-red-500/10 text-red-900/90 dark:text-red-200"
+                          : active
+                            ? "border-gold-500 bg-gold-500/10 text-[var(--fg)] shadow-gold"
+                            : "border-[var(--border)] hover:border-gold-500/40"
                       }`}
                     >
                       {label}
+                      {!livre ? (
+                        <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide">
+                          ocupado
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
               </div>
             )}
-            <div className="flex flex-wrap gap-3">
-              <Button type="button" variant="outline" onClick={() => setStep(2)}>
-                Voltar
-              </Button>
-              <Button
-                type="button"
-                disabled={!horaInicio}
-                onClick={() => setStep(4)}
-              >
-                Continuar
-              </Button>
-            </div>
-          </motion.div>
-        ) : null}
 
-        {step === 4 && service && horaInicio ? (
-          <motion.div
-            key="s4"
-            initial={{ opacity: 0, x: 24 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -24 }}
-            transition={{ duration: 0.2 }}
-          >
-            <form
-              className="space-y-4 border-t border-[var(--border)] pt-6"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const form = new FormData(e.currentTarget);
-                form.set("barbershop_id", barbershopId);
-                form.set("data", date);
-                form.set("servico_id", service.id);
-                form.set("hora_inicio", horaInicio);
-                startTransition(async () => {
-                  try {
-                    const r = await bookPublicAppointment(form);
-                    if (r.error) toast.error(r.error);
-                    else {
-                      toast.success("Agendamento confirmado! Entraremos em contato.");
-                      setHoraInicio(null);
-                      setStep(1);
-                      setService(null);
+            {horaInicio && service ? (
+              <form
+                className="space-y-4 border-t border-[var(--border)] pt-6"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const form = new FormData(e.currentTarget);
+                  form.set("barbershop_id", barbershopId);
+                  form.set("data", date);
+                  form.set("servico_id", service.id);
+                  form.set("hora_inicio", horaInicio);
+                  startTransition(async () => {
+                    try {
+                      const r = await bookPublicAppointment(form);
+                      if (r.error) toast.error(r.error);
+                      else {
+                        toast.success("Horário reservado com sucesso");
+                        setHoraInicio(null);
+                        setStep(1);
+                        setService(null);
+                      }
+                    } catch (e) {
+                      logClientDebug("booking", "bookPublicAppointment falhou", {
+                        message: e instanceof Error ? e.message : String(e),
+                      });
+                      toast.error(
+                        "Não foi possível concluir o agendamento. Verifique a conexão e tente novamente."
+                      );
                     }
-                  } catch (e) {
-                    logClientDebug("booking", "bookPublicAppointment falhou", {
-                      message: e instanceof Error ? e.message : String(e),
-                    });
-                    toast.error(
-                      "Não foi possível concluir o agendamento. Verifique a conexão e tente novamente."
-                    );
-                  }
-                });
-              }}
-            >
-              <p className="text-sm text-[var(--muted)]">
-                Resumo: {service.nome} ·{" "}
-                {new Date(date + "T12:00:00").toLocaleDateString("pt-BR")} às{" "}
-                {horaInicio.slice(0, 5)}
-              </p>
-              <Input name="cliente_nome" label="Seu nome" required autoComplete="name" />
-              <Input
-                name="cliente_telefone"
-                label="Telefone / WhatsApp"
-                required
-                autoComplete="tel"
-              />
+                  });
+                }}
+              >
+                <p className="text-sm text-[var(--muted)]">
+                  Resumo: {service.nome} ·{" "}
+                  {new Date(date + "T12:00:00").toLocaleDateString("pt-BR")} às{" "}
+                  {horaInicio.slice(0, 5)}
+                </p>
+                <Input name="cliente_nome" label="Seu nome" required autoComplete="name" />
+                <Input
+                  name="cliente_telefone"
+                  label="Telefone / WhatsApp"
+                  required
+                  autoComplete="tel"
+                />
+                <div className="flex flex-wrap gap-3">
+                  <Button type="button" variant="outline" onClick={() => setStep(2)}>
+                    Voltar
+                  </Button>
+                  <Button type="submit" className="!py-3" disabled={pending}>
+                    {pending ? "Reservando…" : "Confirmar reserva"}
+                  </Button>
+                </div>
+              </form>
+            ) : null}
+
+            {!horaInicio ? (
               <div className="flex flex-wrap gap-3">
-                <Button type="button" variant="outline" onClick={() => setStep(3)}>
+                <Button type="button" variant="outline" onClick={() => setStep(2)}>
                   Voltar
                 </Button>
-                <Button type="submit" className="!py-3" disabled={pending}>
-                  {pending ? "Reservando…" : "Confirmar agendamento"}
-                </Button>
               </div>
-            </form>
+            ) : null}
           </motion.div>
         ) : null}
       </AnimatePresence>

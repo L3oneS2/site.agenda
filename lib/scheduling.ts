@@ -1,6 +1,4 @@
-import type { Availability } from "@/lib/types";
-
-/** Granularidade dos horários sugeridos ao cliente (minutos). */
+/** Granularidade legada (reservas por intervalo); mantida para referência futura. */
 export const SLOT_STEP_MINUTES = 15;
 
 export function timeStrToMinutes(t: string): number {
@@ -65,30 +63,31 @@ export function bookedRowsToIntervals(
 }
 
 /**
- * Gera inícios de slot onde o intervalo [início, início+duração] cabe na
- * disponibilidade e não colide com agendamentos existentes.
+ * Cada string é um início explícito (HH:MM:SS) cadastrado pelo barbeiro para a data.
+ * Classifica em livres (cabem duration sem colidir) vs bloqueados (colidem ou estouram o dia).
  */
-export function generateSlotStartsForDuration(
-  dayAvailability: Availability[],
+export function discreteSlotsFreeAndBlocked(
+  slotStartsNormalized: string[],
   bookedIntervals: { startMin: number; endMin: number }[],
-  durationMinutes: number,
-  stepMinutes: number = SLOT_STEP_MINUTES
-): string[] {
-  const slots: string[] = [];
-
-  for (const block of dayAvailability) {
-    const blockStart = timeStrToMinutes(String(block.hora_inicio));
-    const blockEnd = timeStrToMinutes(String(block.hora_fim));
-    let cur = blockStart;
-
-    while (cur + durationMinutes <= blockEnd) {
-      const end = cur + durationMinutes;
-      if (!hasOverlapWithBooked(cur, end, bookedIntervals)) {
-        slots.push(minutesToTimeStr(cur));
-      }
-      cur += stepMinutes;
+  durationMinutes: number
+): { free: string[]; blocked: string[] } {
+  const free: string[] = [];
+  const blocked: string[] = [];
+  const sorted = [...new Set(slotStartsNormalized)].sort(
+    (a, b) => timeStrToMinutes(a) - timeStrToMinutes(b)
+  );
+  for (const hora of sorted) {
+    const startMin = timeStrToMinutes(hora);
+    const endMin = startMin + durationMinutes;
+    if (endMin > 24 * 60) {
+      blocked.push(hora);
+      continue;
+    }
+    if (hasOverlapWithBooked(startMin, endMin, bookedIntervals)) {
+      blocked.push(hora);
+    } else {
+      free.push(hora);
     }
   }
-
-  return slots.sort();
+  return { free, blocked };
 }

@@ -3,19 +3,10 @@ import { tryCreateClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { Card } from "@/components/ui/card";
-import { AgendaClient, CancelAppointmentButton } from "./ui/agenda-client";
+import { CancelAppointmentButton } from "./ui/agenda-client";
+import { AgendaPlanner } from "./ui/agenda-planner";
 import { DayTimeline } from "./ui/day-timeline";
-import type { Appointment, Availability } from "@/lib/types";
-
-const dias = [
-  "Domingo",
-  "Segunda",
-  "Terça",
-  "Quarta",
-  "Quinta",
-  "Sexta",
-  "Sábado",
-];
+import type { Appointment } from "@/lib/types";
 
 /** Limite de janela + linhas para lista “Reservas futuras” (compatível com timeline por dia). */
 const AGENDA_FUTURE_DAYS = 120;
@@ -32,13 +23,6 @@ export default async function AgendaPage() {
   const { user } = await requireBarber();
   const supabase = await tryCreateClient();
   if (!supabase) redirect("/login");
-
-  const { data: blocks } = await supabase
-    .from("availability")
-    .select("id, user_id, dia_semana, hora_inicio, hora_fim, created_at")
-    .eq("user_id", user.id)
-    .order("dia_semana")
-    .order("hora_inicio");
 
   const today = new Date().toISOString().slice(0, 10);
   const futureUntil = addDaysToISODate(today, AGENDA_FUTURE_DAYS);
@@ -63,29 +47,32 @@ export default async function AgendaPage() {
     <div className="mx-auto max-w-6xl px-4 py-12">
       <h1 className="font-display text-4xl font-bold">Agenda</h1>
       <p className="mt-2 max-w-2xl text-[var(--muted)]">
-        Defina faixas de atendimento, cadastre serviços no painel e acompanhe a
-        linha do tempo do dia.
+        Defina horários por data no calendário; o link público lista exatamente esses
+        inícios de atendimento. Reservas aparecem na linha do tempo e na lista ao
+        lado, com atualização em tempo quase real.
       </p>
 
       <Card className="mt-10">
-        <h2 className="font-display text-xl font-semibold">Linha do tempo (dia)</h2>
+        <h2 className="font-display text-xl font-semibold">
+          Disponibilidade por data
+        </h2>
         <p className="mt-1 text-sm text-[var(--muted)]">
-          Altura de cada bloco é proporcional à duração. Cores variam por serviço.
+          Cada horário pertence só à data escolhida. Indicadores: verde (há vagas),
+          vermelho (tudo ocupado), cinza (sem cadastro).
         </p>
-        <DayTimeline
-          initialDate={today}
-          initialAppointments={normalizeJoinedAppointments(todayAppts)}
-        />
+        <AgendaPlanner barberUserId={user.id} />
       </Card>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-2">
         <Card>
-          <h2 className="font-display text-xl font-semibold">
-            Horários disponíveis
-          </h2>
-          <AgendaClient
-            dias={dias}
-            initialBlocks={(blocks ?? []) as Availability[]}
+          <h2 className="font-display text-xl font-semibold">Linha do tempo (dia)</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Altura de cada bloco é proporcional à duração. Cores variam por serviço.
+          </p>
+          <DayTimeline
+            barberUserId={user.id}
+            initialDate={today}
+            initialAppointments={normalizeJoinedAppointments(todayAppts)}
           />
         </Card>
 

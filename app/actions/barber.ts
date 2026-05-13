@@ -6,41 +6,98 @@ import { requireBarber } from "@/lib/auth";
 import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { logJsonLine } from "@/lib/supabase/debug-env";
-import type { Appointment } from "@/lib/types";
+import {
+  bookedRowsToIntervals,
+  discreteSlotsFreeAndBlocked,
+  normalizeTimeInput,
+} from "@/lib/scheduling";
+import type { AgendaDayMarker, AgendaDaySlot, Appointment } from "@/lib/types";
 
-export async function addAvailability(formData: FormData) {
+async function revalidatePublicBarbershopPage(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string
+) {
+  const { data: shop } = await supabase
+    .from("barbershops")
+    .select("id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (shop?.id) {
+    revalidatePath(`/barbearia/${shop.id}`);
+  }
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function monthRangeISO(year: number, monthIndex: number): { first: string; last: string } {
+  const first = `${year}-${pad2(monthIndex + 1)}-01`;
+  const lastD = new Date(Date.UTC(year, monthIndex + 1, 0, 12, 0, 0)).getUTCDate();
+  const last = `${year}-${pad2(monthIndex + 1)}-${pad2(lastD)}`;
+  return { first, last };
+}
+
+export async function listAgendaDaySlots(
+  date: string
+): Promise<{ slots?: AgendaDaySlot[]; error?: string }> {
+  const { user } = await requireBarber();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("agenda_day_slots")
+    .select("id, user_id, data, hora, created_at")
+    .eq("user_id", user.id)
+    .eq("data", date)
+    .order("hora");
+
+  if (error) return { error: error.message };
+  return { slots: (data ?? []) as AgendaDaySlot[] };
+}
+
+export async function addAgendaDaySlot(formData: FormData) {
   const { user } = await requireBarber();
   const denied = await barberWriteDeniedMessage();
   if (denied) return { error: denied };
-  const dia_semana = Number(formData.get("dia_semana"));
-  const hora_inicio = String(formData.get("hora_inicio"));
-  const hora_fim = String(formData.get("hora_fim"));
 
-  if (Number.isNaN(dia_semana) || dia_semana < 0 || dia_semana > 6) {
-    return { error: "Dia da semana inválido." };
+  const data = String(formData.get("data") ?? "").trim();
+  const horaRaw = String(formData.get("hora") ?? "").trim();
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) {
+    return { error: "Data inválida." };
+  }
+  if (!horaRaw) {
+    return { error: "Informe o horário." };
   }
 
+  const hora = normalizeTimeInput(horaRaw.length <= 5 ? horaRaw : horaRaw.slice(0, 8));
+
   const supabase = await createClient();
-  const { error } = await supabase.from("availability").insert({
+  const { error } = await supabase.from("agenda_day_slots").insert({
     user_id: user.id,
-    dia_semana,
-    hora_inicio: hora_inicio.length === 5 ? `${hora_inicio}:00` : hora_inicio,
-    hora_fim: hora_fim.length === 5 ? `${hora_fim}:00` : hora_fim,
+    data,
+    hora,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (error.code === "23505") {
+      return { error: "Este horário já está cadastrado nesta data." };
+    }
+    return { error: error.message };
+  }
 
   revalidatePath("/agenda");
+  await revalidatePublicBarbershopPage(supabase, user.id);
   return { ok: true };
 }
 
-export async function deleteAvailability(id: string) {
+export async function deleteAgendaDaySlot(id: string) {
   const { user } = await requireBarber();
   const denied = await barberWriteDeniedMessage();
   if (denied) return { error: denied };
   const supabase = await createClient();
   const { error } = await supabase
-    .from("availability")
+    .from("agenda_day_slots")
     .delete()
     .eq("id", id)
     .eq("user_id", user.id);
@@ -48,7 +105,89 @@ export async function deleteAvailability(id: string) {
   if (error) return { error: error.message };
 
   revalidatePath("/agenda");
+  await revalidatePublicBarbershopPage(supabase, user.id);
   return { ok: true };
+}
+
+export async function getBarberAgendaMonthMarkers(
+  year: number,
+  monthIndex: number
+): Promise<{ markers?: Record<string, AgendaDayMarker>; error?: string }> {
+  const { user } = await requireBarber();
+  const supabase = await createClient();
+
+  const { data: services } = await supabase
+    .from("services")
+    .select("duracao_minutos")
+    .eq("user_id", user.id);
+
+  const minDur = (() => {
+    const arr = (services ?? [])
+      .map((s) => Number((s as { duracao_minutos: number }).duracao_minutos))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (arr.length === 0) return 30;
+    return Math.min(...arr);
+  })();
+
+  const { first, last } = monthRangeISO(year, monthIndex);
+
+  const [{ data: slotRows, error: slotErr }, { data: apptRows, error: apErr }] =
+    await Promise.all([
+      supabase
+        .from("agenda_day_slots")
+        .select("data, hora")
+        .eq("user_id", user.id)
+        .gte("data", first)
+        .lte("data", last),
+      supabase
+        .from("appointments")
+        .select("data, hora_inicio, hora_fim")
+        .eq("barber_id", user.id)
+        .eq("status", "scheduled")
+        .gte("data", first)
+        .lte("data", last),
+    ]);
+
+  if (slotErr) return { error: slotErr.message };
+  if (apErr) return { error: apErr.message };
+
+  const slotsByDate = new Map<string, string[]>();
+  for (const row of slotRows ?? []) {
+    const d = String((row as { data: string }).data);
+    const h = normalizeTimeInput(String((row as { hora: string }).hora));
+    const list = slotsByDate.get(d);
+    if (list) list.push(h);
+    else slotsByDate.set(d, [h]);
+  }
+
+  const apptsByDate = new Map<string, { hora_inicio: string; hora_fim: string }[]>();
+  for (const row of apptRows ?? []) {
+    const d = String((row as { data: string }).data);
+    const slice = {
+      hora_inicio: String((row as { hora_inicio: string }).hora_inicio),
+      hora_fim: String((row as { hora_fim: string }).hora_fim),
+    };
+    const list = apptsByDate.get(d);
+    if (list) list.push(slice);
+    else apptsByDate.set(d, [slice]);
+  }
+
+  const markers: Record<string, AgendaDayMarker> = {};
+  const lastD = new Date(Date.UTC(year, monthIndex + 1, 0, 12, 0, 0)).getUTCDate();
+
+  for (let day = 1; day <= lastD; day++) {
+    const iso = `${year}-${pad2(monthIndex + 1)}-${pad2(day)}`;
+    const starts = slotsByDate.get(iso) ?? [];
+    if (starts.length === 0) {
+      markers[iso] = "none";
+      continue;
+    }
+    const intervals = bookedRowsToIntervals(apptsByDate.get(iso) ?? []);
+    const { free } = discreteSlotsFreeAndBlocked(starts, intervals, minDur);
+    markers[iso] = free.length > 0 ? "open" : "full";
+  }
+
+  return { markers };
 }
 
 export async function cancelAppointment(id: string) {
@@ -66,6 +205,7 @@ export async function cancelAppointment(id: string) {
 
   revalidatePath("/dashboard");
   revalidatePath("/agenda");
+  await revalidatePublicBarbershopPage(supabase, user.id);
   return { ok: true };
 }
 

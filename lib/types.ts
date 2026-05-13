@@ -46,12 +46,13 @@ export interface Service {
   updated_at: string;
 }
 
-export interface Availability {
+export type AgendaDayMarker = "none" | "open" | "full";
+
+export interface AgendaDaySlot {
   id: string;
   user_id: string;
-  dia_semana: number;
-  hora_inicio: string;
-  hora_fim: string;
+  data: string;
+  hora: string;
   created_at: string;
 }
 

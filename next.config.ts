@@ -3,7 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   experimental: {
-    optimizePackageImports: ["framer-motion", "sonner", "@supabase/supabase-js"],
+    // Não incluir @supabase/supabase-js: optimizePackageImports quebra o bundle
+    // do cliente (createBrowserClient / Realtime) com "__webpack_modules__[moduleId] is not a function".
+    optimizePackageImports: ["framer-motion", "sonner"],
   },
   images: {
     formats: ["image/avif", "image/webp"],

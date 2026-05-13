@@ -1,8 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getBarberAppointmentsForDay } from "@/app/actions/barber";
+import { createBrowserSupabase } from "@/lib/supabase/browser";
 import { logClientDebug, logJsonLine } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { timeStrToMinutes } from "@/lib/scheduling";
@@ -42,9 +44,11 @@ function formatLabel(iso: string) {
 export function DayTimeline({
   initialDate,
   initialAppointments,
+  barberUserId,
 }: {
   initialDate: string;
   initialAppointments: Appointment[];
+  barberUserId: string;
 }) {
   const [date, setDate] = useState(initialDate);
   const [rows, setRows] = useState<Appointment[]>(initialAppointments);
@@ -105,6 +109,34 @@ export function DayTimeline({
     void loadDay(ac.signal);
     return () => ac.abort();
   }, [date, initialDate, loadDay]);
+
+  useEffect(() => {
+    const supabase = createBrowserSupabase();
+    if (!supabase || !barberUserId) return;
+
+    const run = () => {
+      const ac = new AbortController();
+      void loadDay(ac.signal);
+    };
+
+    const ch = supabase
+      .channel(`day-timeline-${barberUserId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "appointments",
+          filter: `barber_id=eq.${barberUserId}`,
+        },
+        run
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(ch);
+    };
+  }, [barberUserId, loadDay]);
 
   const ticks = useMemo(() => {
     const out: number[] = [];

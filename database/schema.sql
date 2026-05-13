@@ -92,18 +92,17 @@ CREATE INDEX IF NOT EXISTS idx_signup_rate_ip_time ON public.signup_rate_events 
 ALTER TABLE public.trial_identifier_claims ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.signup_rate_events ENABLE ROW LEVEL SECURITY;
 
--- Disponibilidade semanal do barbeiro
-CREATE TABLE IF NOT EXISTS public.availability (
+-- Ofertas de horário por data (inícios explícitos cadastrados pelo barbeiro)
+CREATE TABLE IF NOT EXISTS public.agenda_day_slots (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES public.profiles (id) ON DELETE CASCADE,
-  dia_semana SMALLINT NOT NULL CHECK (dia_semana >= 0 AND dia_semana <= 6),
-  hora_inicio TIME NOT NULL,
-  hora_fim TIME NOT NULL,
+  data DATE NOT NULL,
+  hora TIME NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT availability_time_order CHECK (hora_fim > hora_inicio)
+  UNIQUE (user_id, data, hora)
 );
 
-CREATE INDEX IF NOT EXISTS idx_availability_user_day ON public.availability (user_id, dia_semana);
+CREATE INDEX IF NOT EXISTS idx_agenda_day_slots_user_data ON public.agenda_day_slots (user_id, data);
 
 -- Serviços oferecidos pelo barbeiro
 CREATE TABLE IF NOT EXISTS public.services (
@@ -374,7 +373,7 @@ GRANT EXECUTE ON FUNCTION public.subscription_grants_public_access (public.subsc
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.barbershops ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.availability ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.agenda_day_slots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.appointments ENABLE ROW LEVEL SECURITY;
 
@@ -438,7 +437,7 @@ CREATE POLICY "subscriptions_select_own"
   USING (user_id = auth.uid());
 
 -- subscriptions: leitura pública APENAS para linhas ativas
--- Necessário porque outras policies (barbershops/services/availability) usam EXISTS(subscriptions)
+-- Necessário porque outras policies (barbershops/services/agenda_day_slots) usam EXISTS(subscriptions)
 -- e o RLS de subscriptions bloqueia o subselect para anon se não houver policy de SELECT.
 DROP POLICY IF EXISTS "subscriptions_select_public_active" ON public.subscriptions;
 CREATE POLICY "subscriptions_select_public_active"
@@ -446,41 +445,41 @@ CREATE POLICY "subscriptions_select_public_active"
   TO anon, authenticated
   USING (public.subscription_grants_public_access (subscriptions));
 
--- availability: dono sempre lê; público só barbeiros com assinatura ativa
-DROP POLICY IF EXISTS "availability_select_own" ON public.availability;
-CREATE POLICY "availability_select_own"
-  ON public.availability FOR SELECT
+-- agenda_day_slots: dono sempre lê; público só barbeiros com assinatura ativa
+DROP POLICY IF EXISTS "agenda_day_slots_select_own" ON public.agenda_day_slots;
+CREATE POLICY "agenda_day_slots_select_own"
+  ON public.agenda_day_slots FOR SELECT
   TO authenticated
   USING (user_id = auth.uid());
 
-DROP POLICY IF EXISTS "availability_select_public_active" ON public.availability;
-CREATE POLICY "availability_select_public_active"
-  ON public.availability FOR SELECT
+DROP POLICY IF EXISTS "agenda_day_slots_select_public_active" ON public.agenda_day_slots;
+CREATE POLICY "agenda_day_slots_select_public_active"
+  ON public.agenda_day_slots FOR SELECT
   TO anon, authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.subscriptions s
-      WHERE s.user_id = availability.user_id
+      WHERE s.user_id = agenda_day_slots.user_id
         AND public.subscription_grants_public_access (s)
     )
   );
 
-DROP POLICY IF EXISTS "availability_insert_own" ON public.availability;
-CREATE POLICY "availability_insert_own"
-  ON public.availability FOR INSERT
+DROP POLICY IF EXISTS "agenda_day_slots_insert_own" ON public.agenda_day_slots;
+CREATE POLICY "agenda_day_slots_insert_own"
+  ON public.agenda_day_slots FOR INSERT
   TO authenticated
   WITH CHECK (user_id = auth.uid());
 
-DROP POLICY IF EXISTS "availability_update_own" ON public.availability;
-CREATE POLICY "availability_update_own"
-  ON public.availability FOR UPDATE
+DROP POLICY IF EXISTS "agenda_day_slots_update_own" ON public.agenda_day_slots;
+CREATE POLICY "agenda_day_slots_update_own"
+  ON public.agenda_day_slots FOR UPDATE
   TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
 
-DROP POLICY IF EXISTS "availability_delete_own" ON public.availability;
-CREATE POLICY "availability_delete_own"
-  ON public.availability FOR DELETE
+DROP POLICY IF EXISTS "agenda_day_slots_delete_own" ON public.agenda_day_slots;
+CREATE POLICY "agenda_day_slots_delete_own"
+  ON public.agenda_day_slots FOR DELETE
   TO authenticated
   USING (user_id = auth.uid());
 
