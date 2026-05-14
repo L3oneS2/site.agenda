@@ -2,23 +2,21 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
 import { getStripe } from "@/lib/stripe";
+import { APP_URL } from "@/lib/config";
 import { logJsonLine } from "@/lib/supabase/debug-env";
 
 /** URLs de retorno só com origem configurada ou a do próprio request — nunca `Origin` do cliente em isolamento. */
 function trustedCheckoutOrigin(request: Request): string {
-  const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (fromEnv) {
-    try {
-      return new URL(fromEnv).origin;
-    } catch {
-      logJsonLine({
-        where: "api.create-checkout",
-        phase: "invalid_NEXT_PUBLIC_APP_URL",
-        message: fromEnv.slice(0, 120),
-      });
-    }
+  try {
+    return new URL(APP_URL).origin;
+  } catch {
+    logJsonLine({
+      where: "api.create-checkout",
+      phase: "invalid_APP_URL",
+      message: APP_URL.slice(0, 120),
+    });
+    return new URL(request.url).origin;
   }
-  return new URL(request.url).origin;
 }
 
 /**

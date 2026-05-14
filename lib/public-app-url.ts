@@ -1,9 +1,9 @@
+import { APP_URL } from "@/lib/config";
+
 /** Origem pública do site (links de agendamento, checkout). */
 export function getPublicAppOrigin(): string | null {
-  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (!raw) return null;
   try {
-    return new URL(raw).origin;
+    return new URL(APP_URL).origin;
   } catch {
     return null;
   }
