@@ -1,14 +1,10 @@
 import type { NextConfig } from "next";
+import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
-if (process.env.NODE_ENV === "development") {
-  void import("@cloudflare/next-on-pages/next-dev")
-    .then(({ setupDevPlatform }) => setupDevPlatform())
-    .catch((err: unknown) =>
-      console.error("[@cloudflare/next-on-pages] setupDevPlatform:", err)
-    );
-}
+initOpenNextCloudflareForDev();
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   experimental: {
     // Não incluir @supabase/supabase-js: optimizePackageImports quebra o bundle

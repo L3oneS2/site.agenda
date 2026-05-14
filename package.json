@@ -4,9 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "pages:build": "npx @cloudflare/next-on-pages",
-    "deploy": "npm run pages:build && npx wrangler pages deploy .vercel/output/static",
-    "build": "next build",
+    "build": "next build && npx @opennextjs/cloudflare build --skipNextBuild",
+    "deploy": "npm run build && npx opennextjs-cloudflare deploy",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
@@ -23,7 +22,7 @@
     "stripe": "^17.5.0"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "^1.13.16",
+    "@opennextjs/cloudflare": "^1.19.10",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
@@ -32,6 +31,7 @@
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "wrangler": "^4.91.0"
   }
 }
