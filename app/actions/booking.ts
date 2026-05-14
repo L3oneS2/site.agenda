@@ -131,14 +131,17 @@ export async function getPublicServices(
   return { services: mapServiceRows(data as unknown[] | null) };
 }
 
+/**
+ * Horários disponíveis para reserva pública: apenas inícios em `agenda_day_slots` que
+ * cabem a duração sem sobrepor agendamentos `scheduled` (cancelados não bloqueiam).
+ * Não retorna horários ocupados — o cliente só deve receber esta lista filtrada.
+ */
 export async function getPublicSlots(
   barbershopId: string,
   date: string,
   durationMinutes: number
 ): Promise<{
   slots?: string[];
-  occupied?: string[];
-  defined?: string[];
   error?: string;
   barberId?: string;
 }> {
@@ -200,9 +203,9 @@ export async function getPublicSlots(
     (booked ?? []) as { hora_inicio: string; hora_fim: string }[]
   );
 
-  const { free, blocked } = discreteSlotsFreeAndBlocked(defined, intervals, durationMinutes);
+  const { free } = discreteSlotsFreeAndBlocked(defined, intervals, durationMinutes);
 
-  return { slots: free, occupied: blocked, defined, barberId };
+  return { slots: free, barberId };
 }
 
 export async function getPublicMonthDayMarkers(

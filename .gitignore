@@ -1,6 +1,8 @@
 node_modules
 .next
 out
+.vercel
+.dev.vars
 .env
 .env*.local
 npm-debug.log*

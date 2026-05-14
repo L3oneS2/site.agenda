@@ -61,7 +61,6 @@ export function BookingWizard({
   });
   const [date, setDate] = useState<string>(minDate);
   const [slots, setSlots] = useState<string[]>([]);
-  const [definedOrder, setDefinedOrder] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [horaInicio, setHoraInicio] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -131,7 +130,6 @@ export function BookingWizard({
         if (r.error) {
           toast.error(r.error);
           setSlots([]);
-          setDefinedOrder([]);
           return;
         }
         logClientDebug("booking", "horários carregados", {
@@ -139,17 +137,14 @@ export function BookingWizard({
           data: d,
           duracao: svc.duracao_minutos,
           livres: r.slots?.length ?? 0,
-          ocupados: r.occupied?.length ?? 0,
         });
         setSlots(r.slots ?? []);
-        setDefinedOrder(r.defined ?? []);
       } catch (e) {
         logClientDebug("booking", "getPublicSlots falhou", {
           message: e instanceof Error ? e.message : String(e),
         });
         toast.error("Não foi possível carregar os horários.");
         setSlots([]);
-        setDefinedOrder([]);
       } finally {
         setLoadingSlots(false);
       }
@@ -317,9 +312,9 @@ export function BookingWizard({
           >
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-[var(--muted)]">
-                Verde: horários livres para{" "}
+                Verde: há pelo menos um horário livre para{" "}
                 <strong className="text-[var(--fg)]">{service.duracao_minutos} min</strong>.
-                Vermelho: cadastrado, mas ocupado. Cinza: sem horários nesta data.
+                Vermelho: nenhuma vaga neste dia. Cinza: sem horários cadastrados.
               </p>
               {loadingMarkers ? (
                 <span className="text-xs text-[var(--muted)]">Carregando…</span>
@@ -449,46 +444,30 @@ export function BookingWizard({
             <p className="text-sm text-[var(--muted)]">
               {formatarDataBR(date)} · {service.nome}
             </p>
-            <p className="text-xs text-[var(--muted)]">
-              <span className="mr-3 inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-500" /> disponível
-              </span>
-              <span className="inline-flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-red-500" /> ocupado
-              </span>
-            </p>
             {loadingSlots ? (
               <p className="text-sm text-[var(--muted)]">Carregando horários…</p>
-            ) : definedOrder.length === 0 ? (
+            ) : slots.length === 0 ? (
               <p className="text-sm text-[var(--muted)]">
-                Nenhum horário cadastrado para esta data. Escolha outra no calendário.
+                Nenhum horário disponível nesta data para este serviço. Escolha outra no
+                calendário.
               </p>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {definedOrder.map((t) => {
-                  const livre = slots.includes(t);
+                {slots.map((t) => {
                   const label = t.slice(0, 5);
                   const active = horaInicio === t;
                   return (
                     <button
                       key={t}
                       type="button"
-                      disabled={!livre}
-                      onClick={() => livre && setHoraInicio(t)}
+                      onClick={() => setHoraInicio(t)}
                       className={`rounded-2xl border px-4 py-2 text-sm transition ${
-                        !livre
-                          ? "cursor-not-allowed border-red-500/40 bg-red-500/10 text-red-900/90 dark:text-red-200"
-                          : active
-                            ? "border-gold-500 bg-gold-500/10 text-[var(--fg)] shadow-gold"
-                            : "border-[var(--border)] hover:border-gold-500/40"
+                        active
+                          ? "border-gold-500 bg-gold-500/10 text-[var(--fg)] shadow-gold"
+                          : "border-[var(--border)] hover:border-gold-500/40"
                       }`}
                     >
                       {label}
-                      {!livre ? (
-                        <span className="ml-1 text-[10px] font-semibold uppercase tracking-wide">
-                          ocupado
-                        </span>
-                      ) : null}
                     </button>
                   );
                 })}

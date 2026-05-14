@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 
+if (process.env.NODE_ENV === "development") {
+  void import("@cloudflare/next-on-pages/next-dev")
+    .then(({ setupDevPlatform }) => setupDevPlatform())
+    .catch((err: unknown) =>
+      console.error("[@cloudflare/next-on-pages] setupDevPlatform:", err)
+    );
+}
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   experimental: {
