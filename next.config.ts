@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { NextConfig } from "next";
 import { initOpenNextCloudflareForDev } from "@opennextjs/cloudflare";
 
@@ -22,6 +24,20 @@ const nextConfig: NextConfig = {
         permanent: false,
       },
     ];
+  },
+  /** Stripe: resolução default aponta para `stripe.cjs.node.js`; no Cloudflare (workerd / nodejs_compat) usar bundle worker (fetch HTTP). */
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // `require.resolve("stripe")` → .../stripe/cjs/stripe.cjs.node.js (package sem export de package.json)
+      const stripeNodeEntry = require.resolve("stripe");
+      const stripeCjsDir = path.dirname(stripeNodeEntry);
+      config.resolve = config.resolve ?? {};
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        stripe: path.join(stripeCjsDir, "stripe.cjs.worker.js"),
+      };
+    }
+    return config;
   },
 };
 
