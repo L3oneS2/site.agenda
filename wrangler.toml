@@ -1,11 +1,19 @@
 # Cloudflare Workers + OpenNext (SSR, middleware, API routes).
-# Deploy: npm run deploy  (ou Workers Builds com build + opennextjs-cloudflare deploy)
-# Não usar pages_build_output_dir aqui — Pages estático não publica o worker.
+# Deploy: npm run deploy (ou Workers Builds que use este wrangler.toml)
+# Não coloque secrets aqui (service role, Stripe secret, webhook, cron) — só no painel Cloudflare.
+
 name = "corte-pro"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
 main = ".open-next/worker.js"
+
+# NEXT_PUBLIC_* e price id: disponíveis no Worker e durante `wrangler`/`opennextjs-cloudflare` (build incluso).
+[vars]
+NEXT_PUBLIC_SUPABASE_URL = "https://ohccqhwteacndsgbwfli.supabase.co"
+NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oY2NxaHd0ZWFjbmRzZ2J3ZmxpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwOTY0MzYsImV4cCI6MjA5MzY3MjQzNn0.5YwWMbMtJXjmOL3OflPPJb46Aexh211AG3yMmfJdC90"
+NEXT_PUBLIC_APP_URL = "https://corte-pro.zanquieta-leone.workers.dev"
+STRIPE_PRICE_ID = "price_1TWlHYChnPRBbglJKfkRVgTl"
 
 [assets]
 directory = ".open-next/assets"
