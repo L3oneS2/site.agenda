@@ -22,7 +22,7 @@ Este projeto **não** é SPA estático: precisa do Worker (`.open-next/worker.js
 
 1. **Workers Builds** (recomendado) ou CI: `npm run build` e deploy `npx opennextjs-cloudflare deploy` (ver script `deploy` no `package.json`).
 2. Definir **todas** as envs no painel Workers (mesma tabela abaixo). `NEXT_PUBLIC_*` no build e em runtime.
-3. Domínio: `cortepro.pages.dev` pode apontar para o Worker; desativar deploy **Pages** só-estático no mesmo repo se causar 404.
+3. Domínio: defina `NEXT_PUBLIC_APP_URL` com o URL público (ex. `https://corte-pro.<subdomínio>.workers.dev` ou domínio próprio). `corte-pro` deve coincidir com `name` em `wrangler.toml`. Desativar deploy **Pages** só-estático no mesmo repo se causar 404.
 4. Local (runtime Workers): `npm run preview` após build.
 5. Webhook Stripe: `https://<domínio>/api/stripe/webhook`.
 

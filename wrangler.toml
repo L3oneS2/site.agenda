@@ -1,7 +1,7 @@
 # Cloudflare Workers + OpenNext (SSR, middleware, API routes).
 # Deploy: npm run deploy  (ou Workers Builds com build + opennextjs-cloudflare deploy)
 # Não usar pages_build_output_dir aqui — Pages estático não publica o worker.
-name = "cortepro"
+name = "corte-pro"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
