@@ -16,6 +16,16 @@ Checklist para deploy e suporte. Detalhes de produto estão em `app/actions/READ
 | `TRIAL_IDENTITY_PEPPER` | Hash anti-fraude trial (obrigatório em produção no código) |
 | `NEXT_PUBLIC_APP_URL` | (Opcional) origem absoluta para redirects Stripe |
 
+## Deploy Cloudflare (Workers + OpenNext)
+
+Este projeto **não** é SPA estático: precisa do Worker (`.open-next/worker.js`).
+
+1. **Workers Builds** (recomendado) ou CI: `npm run build` e deploy `npx opennextjs-cloudflare deploy` (ver script `deploy` no `package.json`).
+2. Definir **todas** as envs no painel Workers (mesma tabela abaixo). `NEXT_PUBLIC_*` no build e em runtime.
+3. Domínio: `cortepro.pages.dev` pode apontar para o Worker; desativar deploy **Pages** só-estático no mesmo repo se causar 404.
+4. Local (runtime Workers): `npm run preview` após build.
+5. Webhook Stripe: `https://<domínio>/api/stripe/webhook`.
+
 ## Deploy (ex.: Vercel)
 
 1. Definir todas as envs no painel e **redeploy** após alterar secrets.
