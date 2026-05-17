@@ -20,6 +20,7 @@ import {
   normalizeIsoDateFromDb,
   timeStrToMinutes,
 } from "@/lib/scheduling";
+import { APPOINTMENT_STATUS } from "@/lib/appointments/status";
 import { mapServiceRows } from "@/lib/map-service-row";
 import type { AgendaDayMarker, Service } from "@/lib/types";
 import { appointmentPublicUrl } from "@/lib/public-app-url";
@@ -195,7 +196,7 @@ export async function getPublicSlots(
     .select("hora_inicio, hora_fim")
     .eq("barber_id", barberId)
     .eq("data", date)
-    .eq("status", "scheduled");
+    .eq("status", APPOINTMENT_STATUS.SCHEDULED);
 
   if (apError) return { error: apError.message };
 
@@ -262,7 +263,7 @@ export async function getPublicMonthDayMarkers(
         .from("appointments")
         .select("data, hora_inicio, hora_fim")
         .eq("barber_id", barberId)
-        .eq("status", "scheduled")
+        .eq("status", APPOINTMENT_STATUS.SCHEDULED)
         .gte("data", first)
         .lte("data", last),
     ]);
@@ -364,7 +365,7 @@ export async function getDatesWithAvailability(
         .from("appointments")
         .select("data, hora_inicio, hora_fim")
         .eq("barber_id", barberId)
-        .eq("status", "scheduled")
+        .eq("status", APPOINTMENT_STATUS.SCHEDULED)
         .gte("data", fromISO)
         .lte("data", endISO),
     ]);
@@ -516,7 +517,7 @@ export async function bookPublicAppointment(formData: FormData) {
       .select("hora_inicio, hora_fim")
       .eq("barber_id", barberId)
       .eq("data", data)
-      .eq("status", "scheduled");
+      .eq("status", APPOINTMENT_STATUS.SCHEDULED);
 
     if (exErr) return { error: exErr.message };
 
@@ -539,7 +540,7 @@ export async function bookPublicAppointment(formData: FormData) {
       data,
       hora_inicio,
       hora_fim,
-      status: "scheduled" as const,
+      status: APPOINTMENT_STATUS.SCHEDULED,
     };
 
     const insertOnce = () =>
@@ -571,7 +572,7 @@ export async function bookPublicAppointment(formData: FormData) {
         .select("hora_inicio, hora_fim")
         .eq("barber_id", barberId)
         .eq("data", data)
-        .eq("status", "scheduled");
+        .eq("status", APPOINTMENT_STATUS.SCHEDULED);
 
       if (exErr2) return { error: exErr2.message };
 

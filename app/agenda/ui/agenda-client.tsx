@@ -3,16 +3,22 @@
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { cancelBarberAppointment, getBarberAppointmentPublicLink } from "@/app/actions/barber";
+import {
+  cancelBarberAppointment,
+  getBarberAppointmentPublicLink,
+  markBarberAppointmentNoShow,
+} from "@/app/actions/barber";
 import { logAppDebug } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 
 export function CancelAppointmentButton({
   id,
   className,
+  label = "Cancelar agendamento",
 }: {
   id: string;
   className?: string;
+  label?: string;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -51,7 +57,7 @@ export function CancelAppointmentButton({
         disabled={loading}
         onClick={() => dialogRef.current?.showModal()}
       >
-        {loading ? "Cancelando…" : "Cancelar agendamento"}
+        {loading ? "Cancelando…" : label}
       </Button>
       <dialog
         ref={dialogRef}
@@ -84,6 +90,49 @@ export function CancelAppointmentButton({
         </div>
       </dialog>
     </>
+  );
+}
+
+function dispatchAgendaChanged(router: ReturnType<typeof useRouter>) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("agenda:appointments-changed"));
+  }
+  router.refresh();
+}
+
+export function MarkAppointmentNoShowButton({
+  id,
+  className,
+  label = "Não veio",
+}: {
+  id: string;
+  className?: string;
+  label?: string;
+}) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      className={className ?? "!py-2 !px-3 text-xs"}
+      disabled={loading}
+      onClick={async () => {
+        setLoading(true);
+        try {
+          const r = await markBarberAppointmentNoShow(id);
+          if (r.error) toast.error(r.error);
+          else {
+            toast.success("Marcado como não compareceu");
+            dispatchAgendaChanged(router);
+          }
+        } finally {
+          setLoading(false);
+        }
+      }}
+    >
+      {loading ? "…" : label}
+    </Button>
   );
 }
 

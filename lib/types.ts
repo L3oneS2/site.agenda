@@ -2,7 +2,10 @@ export type ProfileRole = "barber" | "client";
 
 export type SubscriptionStatus = "trial" | "active" | "expired" | "canceled";
 
-export type AppointmentStatus = "scheduled" | "canceled";
+import type { AppointmentStatus } from "@/lib/appointments/status";
+
+export type { AppointmentStatus } from "@/lib/appointments/status";
+export { APPOINTMENT_STATUS } from "@/lib/appointments/status";
 
 export interface Profile {
   id: string;

@@ -4,9 +4,15 @@ import { getPublicSupabaseEnv } from "@/lib/supabase/public-env";
 import { logGatewayError } from "@/lib/supabase/debug-env";
 import { subscriptionAllowsFullAccess } from "@/lib/subscription-access";
 
-const protectedPrefixes = ["/dashboard", "/agenda", "/assinatura", "/suporte"];
+const protectedPrefixes = [
+  "/dashboard",
+  "/agenda",
+  "/relatorios",
+  "/assinatura",
+  "/suporte",
+];
 
-const barberRestrictedPrefixes = ["/dashboard", "/agenda"];
+const barberRestrictedPrefixes = ["/dashboard", "/agenda", "/relatorios"];
 
 function isRestrictedBarberRoute(pathname: string): boolean {
   return barberRestrictedPrefixes.some((p) => pathname.startsWith(p));
@@ -115,7 +121,7 @@ export async function middleware(request: NextRequest) {
     const bootstrapping = !shop;
 
     if (bootstrapping) {
-      if (pathname.startsWith("/agenda")) {
+      if (pathname.startsWith("/agenda") || pathname.startsWith("/relatorios")) {
         const u = request.nextUrl.clone();
         u.pathname = "/dashboard";
         return NextResponse.redirect(u);

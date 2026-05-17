@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { getBarberAppointmentsForDay } from "@/app/actions/barber";
-import { CancelAppointmentButton } from "./agenda-client";
+import { AppointmentGraceActions } from "./appointment-grace-actions";
 import { logClientDebug, logJsonLine } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { timeStrToMinutes } from "@/lib/scheduling";
 import { formatarDataBR } from "@/lib/formatar-data-br";
+import { APPOINTMENT_STATUS } from "@/lib/appointments/status";
 import type { Appointment } from "@/lib/types";
 
 const DAY_START_MIN = 7 * 60;
@@ -241,10 +242,12 @@ export function DayTimeline({
                   <span className="inline-block rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-800 dark:bg-white/15 dark:text-gold-200">
                     confirmado
                   </span>
-                  {a.status === "scheduled" ? (
-                    <CancelAppointmentButton
-                      id={a.id}
-                      className="!py-1 !px-2 text-[10px] font-medium"
+                  {a.status === APPOINTMENT_STATUS.SCHEDULED ? (
+                    <AppointmentGraceActions
+                      appointmentId={a.id}
+                      data={a.data}
+                      horaFim={String(a.hora_fim)}
+                      compact
                     />
                   ) : null}
                 </div>

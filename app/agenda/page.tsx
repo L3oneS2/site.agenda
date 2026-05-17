@@ -3,9 +3,15 @@ import { tryCreateClient } from "@/lib/supabase/server";
 import { requireBarber } from "@/lib/auth";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { Card } from "@/components/ui/card";
-import { CancelAppointmentButton, CopyAppointmentLinkButton } from "./ui/agenda-client";
+import { AppointmentGraceActions } from "./ui/appointment-grace-actions";
+import { CopyAppointmentLinkButton } from "./ui/agenda-client";
+import { autoCompleteBarberAppointments } from "@/app/actions/barber";
 import { AgendaPlanner } from "./ui/agenda-planner";
 import { DayTimeline } from "./ui/day-timeline";
+import {
+  APPOINTMENT_STATUS,
+  appointmentStatusLabel,
+} from "@/lib/appointments/status";
 import type { Appointment } from "@/lib/types";
 import { formatarDataBR } from "@/lib/formatar-data-br";
 
@@ -25,6 +31,8 @@ export default async function AgendaPage() {
   const supabase = await tryCreateClient();
   if (!supabase) redirect("/login");
 
+  await autoCompleteBarberAppointments();
+
   const today = new Date().toISOString().slice(0, 10);
   const futureUntil = addDaysToISODate(today, AGENDA_FUTURE_DAYS);
 
@@ -34,7 +42,7 @@ export default async function AgendaPage() {
       "id, barber_id, servico_id, cliente_nome, cliente_telefone, data, hora_inicio, hora_fim, status, created_at, updated_at, services ( id, nome, preco, duracao_minutos )"
     )
     .eq("barber_id", user.id)
-    .eq("status", "scheduled")
+    .eq("status", APPOINTMENT_STATUS.SCHEDULED)
     .gte("data", today)
     .lte("data", futureUntil)
     .order("data", { ascending: true })
@@ -92,7 +100,7 @@ export default async function AgendaPage() {
                   "nome" in a.services
                     ? (a.services as { nome: string }).nome
                     : null;
-                const scheduled = a.status === "scheduled";
+                const scheduled = a.status === APPOINTMENT_STATUS.SCHEDULED;
                 return (
                   <li
                     key={a.id}
@@ -114,13 +122,17 @@ export default async function AgendaPage() {
                           scheduled ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-500"
                         }`}
                       >
-                        {scheduled ? "Confirmado" : "Cancelado"}
+                        {appointmentStatusLabel(a.status)}
                       </p>
                     </div>
                     {scheduled ? (
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-col items-end gap-2">
+                        <AppointmentGraceActions
+                          appointmentId={a.id}
+                          data={a.data}
+                          horaFim={String(a.hora_fim)}
+                        />
                         <CopyAppointmentLinkButton appointmentId={a.id} />
-                        <CancelAppointmentButton id={a.id} />
                       </div>
                     ) : null}
                   </li>
@@ -133,3 +145,5 @@ export default async function AgendaPage() {
     </div>
   );
 }
+
+

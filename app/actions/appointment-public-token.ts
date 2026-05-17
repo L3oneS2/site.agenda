@@ -1,6 +1,10 @@
 "use server";
 
 import { createClient } from "@supabase/supabase-js";
+import {
+  type AppointmentStatus,
+  normalizeAppointmentStatus,
+} from "@/lib/appointments/status";
 import { getPublicSupabaseEnv } from "@/lib/supabase/public-env";
 
 const TOKEN_RE =
@@ -13,7 +17,7 @@ export type PublicAppointmentByToken = {
   cliente_nome: string;
   cliente_telefone: string;
   cliente_email: string | null;
-  status: "scheduled" | "canceled";
+  status: AppointmentStatus;
   nome_barbearia: string;
   nome_servico: string | null;
 };
@@ -27,7 +31,7 @@ function mapRpcRow(raw: Record<string, unknown>): PublicAppointmentByToken {
     cliente_nome: String(raw.cliente_nome ?? ""),
     cliente_telefone: String(raw.cliente_telefone ?? ""),
     cliente_email: raw.cliente_email != null ? String(raw.cliente_email) : null,
-    status: raw.status as PublicAppointmentByToken["status"],
+    status: normalizeAppointmentStatus(String(raw.status)),
     nome_barbearia: String(raw.nome_barbearia ?? ""),
     nome_servico: raw.nome_servico != null ? String(raw.nome_servico) : null,
   };

@@ -1,3 +1,4 @@
+import { normalizeAppointmentStatus } from "@/lib/appointments/status";
 import type { Appointment } from "@/lib/types";
 
 /** Supabase pode inferir relação N:1 como array; normaliza para um objeto ou null. */
@@ -12,6 +13,10 @@ export function normalizeJoinedAppointments(data: unknown): Appointment[] {
         : s && typeof s === "object"
           ? (s as Appointment["services"])
           : null;
-    return { ...row, services: joined } as Appointment;
+    return {
+      ...row,
+      status: normalizeAppointmentStatus(String(row.status)),
+      services: joined,
+    } as Appointment;
   });
 }

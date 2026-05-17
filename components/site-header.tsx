@@ -42,6 +42,12 @@ export function SiteHeader({
               >
                 Painel
               </Link>
+              <Link
+                href="/relatorios"
+                className="hidden text-sm text-[var(--muted)] hover:text-gold-500 sm:inline"
+              >
+                Relatórios
+              </Link>
               <LogoutButton />
             </>
           ) : (

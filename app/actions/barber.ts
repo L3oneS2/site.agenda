@@ -7,12 +7,22 @@ import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { appointmentPublicUrl } from "@/lib/public-app-url";
 import { logJsonLine } from "@/lib/supabase/debug-env";
+import { runAutoCompleteAppointments } from "@/lib/appointments/auto-complete";
+import {
+  canShowCancelButton,
+  canShowNoShowButton,
+} from "@/lib/appointments/lifecycle";
+import {
+  APPOINTMENT_STATUS,
+  normalizeAppointmentStatus,
+} from "@/lib/appointments/status";
 import {
   bookedRowsToIntervals,
   discreteSlotsFreeAndBlocked,
   normalizeIsoDateFromDb,
   normalizeTimeInput,
 } from "@/lib/scheduling";
+import { tryCreateAdminClient } from "@/lib/supabaseAdmin";
 import type { AgendaDayMarker, AgendaDaySlot, Appointment } from "@/lib/types";
 
 async function revalidatePublicBarbershopPage(
@@ -145,7 +155,7 @@ export async function getBarberAgendaMonthMarkers(
         .from("appointments")
         .select("data, hora_inicio, hora_fim")
         .eq("barber_id", user.id)
-        .eq("status", "scheduled")
+        .eq("status", APPOINTMENT_STATUS.SCHEDULED)
         .gte("data", first)
         .lte("data", last),
     ]);
@@ -195,8 +205,48 @@ export async function getBarberAgendaMonthMarkers(
 const APPOINTMENT_ID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+async function getScheduledAppointmentRow(appointmentId: string, barberId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("appointments")
+    .select("id, data, hora_fim, status")
+    .eq("id", appointmentId)
+    .eq("barber_id", barberId)
+    .maybeSingle();
+
+  if (error) return { error: error.message as string };
+  if (
+    !data ||
+    normalizeAppointmentStatus(String(data.status)) !== APPOINTMENT_STATUS.SCHEDULED
+  ) {
+    return { error: "Agendamento não encontrado ou já alterado." };
+  }
+
+  return {
+    row: {
+      data: normalizeIsoDateFromDb(data.data),
+      hora_fim: String(data.hora_fim),
+    },
+  };
+}
+
+/** Finalização automática (fim + 20 min) para o barbeiro logado. */
+export async function autoCompleteBarberAppointments() {
+  const { user } = await requireBarber();
+  const admin = tryCreateAdminClient();
+  if (!admin) return { updated: 0 };
+
+  const result = await runAutoCompleteAppointments(admin, { barberId: user.id });
+  if (result.updated > 0) {
+    revalidatePath("/dashboard");
+    revalidatePath("/agenda");
+    revalidatePath("/relatorios");
+  }
+  return result;
+}
+
 /**
- * Cancelamento pelo barbeiro: `scheduled` → `canceled`.
+ * Cancelamento pelo barbeiro: `scheduled` → `cancelled`.
  * Disponibilidade pública deriva de `appointments` agendados (não há `agenda_bookings` nem `is_available` em `agenda_day_slots`).
  * Um único `UPDATE` com filtros em linha é atómico no Postgres.
  */
@@ -209,14 +259,26 @@ export async function cancelBarberAppointment(appointmentId: string) {
     return { error: "Identificador do agendamento inválido." };
   }
 
+  const rowCheck = await getScheduledAppointmentRow(appointmentId, user.id);
+  if (rowCheck.error || !rowCheck.row) {
+    return { error: rowCheck.error ?? "Agendamento inválido." };
+  }
+
+  if (!canShowCancelButton(rowCheck.row.data, rowCheck.row.hora_fim)) {
+    return {
+      error:
+        "O prazo para cancelar este horário expirou (janela de 20 minutos após o término).",
+    };
+  }
+
   const supabase = await createClient();
 
   const { data: updated, error } = await supabase
     .from("appointments")
-    .update({ status: "canceled" })
+    .update({ status: APPOINTMENT_STATUS.CANCELLED })
     .eq("id", appointmentId)
     .eq("barber_id", user.id)
-    .eq("status", "scheduled")
+    .eq("status", APPOINTMENT_STATUS.SCHEDULED)
     .select("id")
     .maybeSingle();
 
@@ -238,6 +300,7 @@ export async function cancelBarberAppointment(appointmentId: string) {
 
   revalidatePath("/dashboard");
   revalidatePath("/agenda");
+  revalidatePath("/relatorios");
   await revalidatePublicBarbershopPage(supabase, user.id);
   return { ok: true as const };
 }
@@ -245,6 +308,73 @@ export async function cancelBarberAppointment(appointmentId: string) {
 /** Alias estável para chamadas existentes. */
 export async function cancelAppointment(id: string) {
   return cancelBarberAppointment(id);
+}
+
+async function updateAppointmentStatus(
+  appointmentId: string,
+  status:
+    | typeof APPOINTMENT_STATUS.COMPLETED
+    | typeof APPOINTMENT_STATUS.NO_SHOW,
+  fromStatus: typeof APPOINTMENT_STATUS.SCHEDULED
+) {
+  const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
+
+  if (!APPOINTMENT_ID_RE.test(appointmentId)) {
+    return { error: "Identificador do agendamento inválido." };
+  }
+
+  const supabase = await createClient();
+  const { data: updated, error } = await supabase
+    .from("appointments")
+    .update({ status })
+    .eq("id", appointmentId)
+    .eq("barber_id", user.id)
+    .eq("status", fromStatus)
+    .select("id")
+    .maybeSingle();
+
+  if (error) return { error: error.message };
+  if (!updated) {
+    return {
+      error: "Agendamento não encontrado ou status não permite esta alteração.",
+    };
+  }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/agenda");
+  revalidatePath("/relatorios");
+  await revalidatePublicBarbershopPage(supabase, user.id);
+  return { ok: true as const };
+}
+
+export async function markBarberAppointmentNoShow(appointmentId: string) {
+  const { user } = await requireBarber();
+  const denied = await barberWriteDeniedMessage();
+  if (denied) return { error: denied };
+
+  if (!APPOINTMENT_ID_RE.test(appointmentId)) {
+    return { error: "Identificador do agendamento inválido." };
+  }
+
+  const rowCheck = await getScheduledAppointmentRow(appointmentId, user.id);
+  if (rowCheck.error || !rowCheck.row) {
+    return { error: rowCheck.error ?? "Agendamento inválido." };
+  }
+
+  if (!canShowNoShowButton(rowCheck.row.data, rowCheck.row.hora_fim)) {
+    return {
+      error:
+        "Só é possível marcar não compareceu na janela de 20 minutos após o horário de término.",
+    };
+  }
+
+  return updateAppointmentStatus(
+    appointmentId,
+    APPOINTMENT_STATUS.NO_SHOW,
+    APPOINTMENT_STATUS.SCHEDULED
+  );
 }
 
 /** Link público do agendamento (token) para o barbeiro copiar e enviar ao cliente. */
@@ -293,7 +423,7 @@ export async function getBarberAppointmentsForDay(
     )
     .eq("barber_id", user.id)
     .eq("data", date)
-    .eq("status", "scheduled")
+    .eq("status", APPOINTMENT_STATUS.SCHEDULED)
     .order("hora_inicio")
     .limit(120);
 

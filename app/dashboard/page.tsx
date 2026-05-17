@@ -17,6 +17,7 @@ import { CompleteBarbershopForm } from "@/app/dashboard/ui/complete-barbershop-f
 import { ServicesManager } from "@/app/dashboard/ui/services-manager";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
 import { mapServiceRows } from "@/lib/map-service-row";
+import { APPOINTMENT_STATUS } from "@/lib/appointments/status";
 import type { Appointment, Service, Subscription } from "@/lib/types";
 import { formatarDataBR } from "@/lib/formatar-data-br";
 
@@ -53,7 +54,7 @@ export default async function DashboardPage() {
       "id, barber_id, servico_id, cliente_nome, cliente_telefone, data, hora_inicio, hora_fim, status, created_at, updated_at, services ( nome )"
     )
     .eq("barber_id", user.id)
-    .eq("status", "scheduled")
+    .eq("status", APPOINTMENT_STATUS.SCHEDULED)
     .gte("data", today)
     .order("data", { ascending: true })
     .order("hora_inicio", { ascending: true })
@@ -85,6 +86,9 @@ export default async function DashboardPage() {
         <div className="flex flex-wrap gap-3">
           <Link href="/agenda">
             <Button variant="outline">Gerenciar horários</Button>
+          </Link>
+          <Link href="/relatorios">
+            <Button variant="outline">Relatórios</Button>
           </Link>
           {barbershop ? (
             <Link href={`/barbearia/${barbershop.id}`}>

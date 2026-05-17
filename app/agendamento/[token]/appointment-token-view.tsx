@@ -5,16 +5,43 @@ import {
   fetchAppointmentByAccessToken,
   type PublicAppointmentByToken,
 } from "@/app/actions/appointment-public-token";
+import {
+  APPOINTMENT_STATUS,
+  appointmentStatusLabel,
+  normalizeAppointmentStatus,
+} from "@/lib/appointments/status";
 import { formatarDataBR } from "@/lib/formatar-data-br";
 
 function statusPresentation(status: PublicAppointmentByToken["status"]) {
-  switch (status) {
-    case "scheduled":
-      return { label: "Confirmado", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400" };
-    case "canceled":
-      return { label: "Cancelado", dot: "bg-red-500", text: "text-red-700 dark:text-red-400" };
+  const s = normalizeAppointmentStatus(status);
+  const label = appointmentStatusLabel(s);
+  switch (s) {
+    case APPOINTMENT_STATUS.SCHEDULED:
+      return {
+        label,
+        dot: "bg-emerald-500",
+        text: "text-emerald-700 dark:text-emerald-400",
+      };
+    case APPOINTMENT_STATUS.COMPLETED:
+      return {
+        label,
+        dot: "bg-gold-500",
+        text: "text-gold-700 dark:text-gold-400",
+      };
+    case APPOINTMENT_STATUS.CANCELLED:
+      return {
+        label,
+        dot: "bg-red-500",
+        text: "text-red-700 dark:text-red-400",
+      };
+    case APPOINTMENT_STATUS.NO_SHOW:
+      return {
+        label,
+        dot: "bg-amber-500",
+        text: "text-amber-800 dark:text-amber-300",
+      };
     default:
-      return { label: "Estado", dot: "bg-zinc-400", text: "text-zinc-600" };
+      return { label, dot: "bg-zinc-400", text: "text-zinc-600" };
   }
 }
 

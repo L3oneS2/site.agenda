@@ -18,7 +18,12 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE public.appointment_status AS ENUM ('scheduled', 'canceled');
+  CREATE TYPE public.appointment_status AS ENUM (
+    'scheduled',
+    'cancelled',
+    'completed',
+    'no_show'
+  );
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
