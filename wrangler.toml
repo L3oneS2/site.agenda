@@ -10,10 +10,10 @@ main = ".open-next/worker.js"
 
 # NEXT_PUBLIC_* e price id: disponíveis no Worker e durante `wrangler`/`opennextjs-cloudflare` (build incluso).
 [vars]
-NEXT_PUBLIC_SUPABASE_URL = "https://ohccqhwteacndsgbwfli.supabase.co"
-NEXT_PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oY2NxaHd0ZWFjbmRzZ2J3ZmxpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwOTY0MzYsImV4cCI6MjA5MzY3MjQzNn0.5YwWMbMtJXjmOL3OflPPJb46Aexh211AG3yMmfJdC90"
-NEXT_PUBLIC_APP_URL = "https://corte-pro.zanquieta-leone.workers.dev"
-STRIPE_PRICE_ID = "price_1TWlHYChnPRBbglJKfkRVgTl"
+NEXT_PUBLIC_SUPABASE_URL = "${NEXT_PUBLIC_SUPABASE_URL}"
+NEXT_PUBLIC_SUPABASE_ANON_KEY = "${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
+NEXT_PUBLIC_APP_URL = "${NEXT_PUBLIC_APP_URL}"
+STRIPE_PRICE_ID = "${STRIPE_PRICE_ID}"
 
 [assets]
 directory = ".open-next/assets"
