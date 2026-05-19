@@ -49,7 +49,3 @@ export function appointmentStatusLabel(
   return APPOINTMENT_STATUS_LABEL[normalizeAppointmentStatus(status)];
 }
 
-/** Ainda bloqueia horários na agenda pública (não finalizado/cancelado/NC). */
-export function appointmentStatusBlocksSlot(status: string): boolean {
-  return normalizeAppointmentStatus(status) === APPOINTMENT_STATUS.SCHEDULED;
-}

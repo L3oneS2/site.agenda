@@ -85,11 +85,3 @@ export function canShowNoShowButton(
   return isInAutoCompleteGraceWindow(data, horaFim, now);
 }
 
-/** Ambos os botões de ação na janela (cancel + não compareceu na tolerância). */
-export function canShowGracePeriodActionButtons(
-  data: string,
-  horaFim: string,
-  now = new Date()
-): boolean {
-  return isInAutoCompleteGraceWindow(data, horaFim, now);
-}

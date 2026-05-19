@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   fetchAppointmentByAccessToken,
   type PublicAppointmentByToken,
@@ -53,17 +53,27 @@ export function AppointmentTokenView({
   initial: PublicAppointmentByToken;
 }) {
   const [row, setRow] = useState<PublicAppointmentByToken>(initial);
+  const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
-    const r = await fetchAppointmentByAccessToken(token);
-    if (r.row) setRow(r.row);
+    try {
+      const r = await fetchAppointmentByAccessToken(token);
+      if (!mountedRef.current) return;
+      if (r.row) setRow(r.row);
+    } catch {
+      /* polling silencioso; dados iniciais permanecem */
+    }
   }, [token]);
 
   useEffect(() => {
+    mountedRef.current = true;
     const id = window.setInterval(() => {
       void refresh();
     }, 14000);
-    return () => window.clearInterval(id);
+    return () => {
+      mountedRef.current = false;
+      window.clearInterval(id);
+    };
   }, [refresh]);
 
   const st = statusPresentation(row.status);
@@ -103,12 +113,6 @@ export function AppointmentTokenView({
             <dt className="shrink-0 text-[var(--muted)]">Cliente</dt>
             <dd className="font-medium text-[var(--fg)]">{row.cliente_nome}</dd>
           </div>
-          {row.cliente_email ? (
-            <div className="flex gap-2">
-              <dt className="shrink-0 text-[var(--muted)]">E-mail</dt>
-              <dd className="break-all font-medium text-[var(--fg)]">{row.cliente_email}</dd>
-            </div>
-          ) : null}
           <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4">
             <dt className="text-[var(--muted)]">Status</dt>
             <dd className={`inline-flex items-center gap-2 font-semibold ${st.text}`}>

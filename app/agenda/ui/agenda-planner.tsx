@@ -41,9 +41,15 @@ function toISO(year: number, month: number, day: number) {
   return dt.toISOString().slice(0, 10);
 }
 
-export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
+export function AgendaPlanner({
+  barberUserId,
+  todayYmd,
+}: {
+  barberUserId: string;
+  todayYmd: string;
+}) {
   const router = useRouter();
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const today = todayYmd;
   const [calendarMonth, setCalendarMonth] = useState(() => {
     const t = new Date();
     return { y: t.getFullYear(), m: t.getMonth() };
@@ -57,6 +63,7 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
 
   const selectedDateRef = useRef(selectedDate);
   selectedDateRef.current = selectedDate;
+  const realtimeWarnedRef = useRef(false);
 
   const monthCells = useMemo(
     () => monthMatrix(calendarMonth.y, calendarMonth.m),
@@ -103,7 +110,13 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
 
   useEffect(() => {
     const supabase = createBrowserSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      if (!realtimeWarnedRef.current) {
+        realtimeWarnedRef.current = true;
+        toast.message("Tempo real indisponível. Atualize a página para ver mudanças.");
+      }
+      return;
+    }
 
     const onAppointmentsChanged = () => {
       void loadMarkers();
@@ -353,13 +366,17 @@ export function AgendaPlanner({ barberUserId }: { barberUserId: string }) {
                     disabled={pending}
                     onClick={() => {
                       startTransition(async () => {
-                        const r = await deleteAgendaDaySlot(s.id);
-                        if (r.error) toast.error(r.error);
-                        else {
-                          toast.success("Horário removido");
-                          await loadMarkers();
-                          await loadSlots(selectedDate);
-                          router.refresh();
+                        try {
+                          const r = await deleteAgendaDaySlot(s.id);
+                          if (r.error) toast.error(r.error);
+                          else {
+                            toast.success("Horário removido");
+                            await loadMarkers();
+                            await loadSlots(selectedDate);
+                            router.refresh();
+                          }
+                        } catch {
+                          toast.error("Não foi possível remover o horário.");
                         }
                       });
                     }}

@@ -13,10 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { AgendaDayMarker, Service } from "@/lib/types";
 import { formatarDataBR } from "@/lib/formatar-data-br";
-
-function todayISODate() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { parseYmd } from "@/lib/reports/timezone";
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
@@ -46,20 +43,22 @@ type Step = 1 | 2 | 3;
 export function BookingWizard({
   barbershopId,
   services,
+  initialTodayYmd,
 }: {
   barbershopId: string;
   services: Service[];
+  initialTodayYmd: string;
 }) {
-  const minDate = useMemo(() => todayISODate(), []);
+  const minDate = initialTodayYmd;
   const [step, setStep] = useState<Step>(1);
   const [service, setService] = useState<Service | null>(null);
   const [dayMarkers, setDayMarkers] = useState<Record<string, AgendaDayMarker>>({});
   const [loadingMarkers, setLoadingMarkers] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => {
-    const t = new Date();
-    return { y: t.getFullYear(), m: t.getMonth() };
+    const { y, m } = parseYmd(initialTodayYmd);
+    return { y, m };
   });
-  const [date, setDate] = useState<string>(minDate);
+  const [date, setDate] = useState<string>(initialTodayYmd);
   const [slots, setSlots] = useState<string[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [horaInicio, setHoraInicio] = useState<string | null>(null);
@@ -98,7 +97,8 @@ export function BookingWizard({
         const opens = Object.entries(r.markers ?? {}).filter(([, v]) => v === "open");
         opens.sort(([a], [b]) => a.localeCompare(b));
         if (opens.length) {
-          const firstOpen = opens[0]![0];
+          const firstOpen = opens[0]?.[0];
+          if (!firstOpen) return;
           setDate((prev) => {
             const m = r.markers?.[prev];
             return m === "open" ? prev : firstOpen;

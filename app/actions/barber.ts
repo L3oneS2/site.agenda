@@ -305,18 +305,7 @@ export async function cancelBarberAppointment(appointmentId: string) {
   return { ok: true as const };
 }
 
-/** Alias estável para chamadas existentes. */
-export async function cancelAppointment(id: string) {
-  return cancelBarberAppointment(id);
-}
-
-async function updateAppointmentStatus(
-  appointmentId: string,
-  status:
-    | typeof APPOINTMENT_STATUS.COMPLETED
-    | typeof APPOINTMENT_STATUS.NO_SHOW,
-  fromStatus: typeof APPOINTMENT_STATUS.SCHEDULED
-) {
+async function markAppointmentNoShowInDb(appointmentId: string) {
   const { user } = await requireBarber();
   const denied = await barberWriteDeniedMessage();
   if (denied) return { error: denied };
@@ -328,10 +317,10 @@ async function updateAppointmentStatus(
   const supabase = await createClient();
   const { data: updated, error } = await supabase
     .from("appointments")
-    .update({ status })
+    .update({ status: APPOINTMENT_STATUS.NO_SHOW })
     .eq("id", appointmentId)
     .eq("barber_id", user.id)
-    .eq("status", fromStatus)
+    .eq("status", APPOINTMENT_STATUS.SCHEDULED)
     .select("id")
     .maybeSingle();
 
@@ -370,11 +359,7 @@ export async function markBarberAppointmentNoShow(appointmentId: string) {
     };
   }
 
-  return updateAppointmentStatus(
-    appointmentId,
-    APPOINTMENT_STATUS.NO_SHOW,
-    APPOINTMENT_STATUS.SCHEDULED
-  );
+  return markAppointmentNoShowInDb(appointmentId);
 }
 
 /** Link público do agendamento (token) para o barbeiro copiar e enviar ao cliente. */

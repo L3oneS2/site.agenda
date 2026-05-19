@@ -223,6 +223,9 @@ export async function finalizeBarberBootstrap(
   try {
     const raw = formData.get("device_payload");
     if (raw && typeof raw === "string" && raw.length > 0) {
+      if (raw.length > 2048) {
+        return { ok: false, error: "Dados do dispositivo inválidos." };
+      }
       deviceSignals = JSON.parse(raw) as unknown;
     }
   } catch {

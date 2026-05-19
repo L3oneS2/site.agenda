@@ -14,17 +14,11 @@ import {
 } from "@/lib/appointments/status";
 import type { Appointment } from "@/lib/types";
 import { formatarDataBR } from "@/lib/formatar-data-br";
+import { addDaysYmd, todayYmdInReportTz } from "@/lib/reports/timezone";
 
 /** Limite de janela + linhas para lista “Reservas futuras” (compatível com timeline por dia). */
 const AGENDA_FUTURE_DAYS = 120;
 const AGENDA_FUTURE_ROWS_CAP = 200;
-
-function addDaysToISODate(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
 
 export default async function AgendaPage() {
   const { user } = await requireBarber();
@@ -33,8 +27,8 @@ export default async function AgendaPage() {
 
   await autoCompleteBarberAppointments();
 
-  const today = new Date().toISOString().slice(0, 10);
-  const futureUntil = addDaysToISODate(today, AGENDA_FUTURE_DAYS);
+  const today = todayYmdInReportTz();
+  const futureUntil = addDaysYmd(today, AGENDA_FUTURE_DAYS);
 
   const { data: appts } = await supabase
     .from("appointments")
@@ -69,7 +63,7 @@ export default async function AgendaPage() {
           Cada horário pertence só à data escolhida. Indicadores: verde (há vagas),
           vermelho (tudo ocupado), cinza (sem cadastro).
         </p>
-        <AgendaPlanner barberUserId={user.id} />
+        <AgendaPlanner barberUserId={user.id} todayYmd={today} />
       </Card>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-2">

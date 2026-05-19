@@ -15,8 +15,6 @@ export type PublicAppointmentByToken = {
   hora_inicio: string;
   hora_fim: string;
   cliente_nome: string;
-  cliente_telefone: string;
-  cliente_email: string | null;
   status: AppointmentStatus;
   nome_barbearia: string;
   nome_servico: string | null;
@@ -29,8 +27,6 @@ function mapRpcRow(raw: Record<string, unknown>): PublicAppointmentByToken {
     hora_inicio: fmtTime(raw.hora_inicio),
     hora_fim: fmtTime(raw.hora_fim),
     cliente_nome: String(raw.cliente_nome ?? ""),
-    cliente_telefone: String(raw.cliente_telefone ?? ""),
-    cliente_email: raw.cliente_email != null ? String(raw.cliente_email) : null,
     status: normalizeAppointmentStatus(String(raw.status)),
     nome_barbearia: String(raw.nome_barbearia ?? ""),
     nome_servico: raw.nome_servico != null ? String(raw.nome_servico) : null,

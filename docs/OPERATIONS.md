@@ -20,11 +20,16 @@ Checklist para deploy e suporte. Detalhes de produto estão em `app/actions/READ
 
 Este projeto **não** é SPA estático: precisa do Worker (`.open-next/worker.js`).
 
-1. **Workers Builds** (recomendado) ou CI: `npm run build` e deploy `npx opennextjs-cloudflare deploy` (ver script `deploy` no `package.json`).
-2. Definir **todas** as envs no painel Workers (mesma tabela abaixo). `NEXT_PUBLIC_*` no build e em runtime.
-3. Domínio: defina `NEXT_PUBLIC_APP_URL` com o URL público (ex. `https://corte-pro.<subdomínio>.workers.dev` ou domínio próprio). `corte-pro` deve coincidir com `name` em `wrangler.toml`. Desativar deploy **Pages** só-estático no mesmo repo se causar 404.
-4. Local (runtime Workers): `npm run preview` após build.
-5. Webhook Stripe: `https://<domínio>/api/stripe/webhook`.
+1. **Workers Builds** (recomendado) ou CI: `npm run build` e deploy `npm run deploy` (ver `package.json`).
+2. Definir **secrets** só no painel Cloudflare (encrypted): `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, `TRIAL_IDENTITY_PEPPER`. **Não** colocar esses valores em `.env.local` durante o build de produção — o OpenNext pode embutir envs do build em `.open-next/` e vazar no bundle do Worker.
+3. `wrangler.toml` / `[vars]`: apenas `NEXT_PUBLIC_*` e `STRIPE_PRICE_ID` (não-secret).
+4. `CRON_SECRET`: mínimo 32 caracteres aleatórios; rotacionar se já houve deploy com valor fraco.
+5. Domínio: defina `NEXT_PUBLIC_APP_URL` com o URL público (ex. `https://corte-pro.<subdomínio>.workers.dev` ou domínio próprio). `corte-pro` deve coincidir com `name` em `wrangler.toml`.
+6. **Cron (Cloudflare):** o `vercel.json` não aplica em Workers. No painel Cloudflare → Workers → Triggers → Cron, configure chamadas HTTP (ou use Workers Cron + roteamento) para:
+   - `GET https://<domínio>/api/cron/expire-subscriptions` — diário (ex. `0 8 * * *`)
+   - `GET https://<domínio>/api/cron/auto-complete-appointments` — a cada 5 min (`*/5 * * * *`)
+   - Header: `Authorization: Bearer <CRON_SECRET>`
+7. Webhook Stripe: `https://<domínio>/api/stripe/webhook`.
 
 ## Deploy (ex.: Vercel)
 
@@ -35,7 +40,8 @@ Este projeto **não** é SPA estático: precisa do Worker (`.open-next/worker.js
 ## Migrations (Supabase)
 
 1. Aplicar ficheiros em `database/migrations/` na ordem cronológica (SQL Editor ou `supabase db push`).
-2. Manter `database/schema.sql` alinhado com o estado desejado de referência (não substitui migrações já aplicadas em produção).
+2. **Obrigatório para segurança (Etapa 2):** `20260520_security_rls_public_access.sql` — fecha SELECT público em `subscriptions`, endurece RPC do token e cria `booking_rate_events`.
+3. Manter `database/schema.sql` alinhado com o estado desejado de referência (não substitui migrações já aplicadas em produção).
 
 ## Cron
 

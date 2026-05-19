@@ -13,6 +13,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrialReminderBanner } from "@/components/trial-reminder-banner";
+import { todayYmdInReportTz } from "@/lib/reports/timezone";
 import { CompleteBarbershopForm } from "@/app/dashboard/ui/complete-barbershop-form";
 import { ServicesManager } from "@/app/dashboard/ui/services-manager";
 import { normalizeJoinedAppointments } from "@/lib/appointment-rows";
@@ -46,7 +47,7 @@ export default async function DashboardPage() {
 
   const sub = await getSubscription();
   const shop = await getBarbershopForCurrentUser();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayYmdInReportTz();
 
   const { data: upcoming } = await supabase
     .from("appointments")
@@ -66,7 +67,7 @@ export default async function DashboardPage() {
     .eq("user_id", user.id)
     .order("nome");
 
-  const serviceList = mapServiceRows(rawServices as unknown[] | null);
+  const serviceList = mapServiceRows(rawServices);
 
   const barbershop = shop;
   const rows = normalizeJoinedAppointments(upcoming) as Appointment[];

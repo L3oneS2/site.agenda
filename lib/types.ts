@@ -1,3 +1,4 @@
+/** `client` reservado para fluxo futuro; MVP usa apenas `barber` no painel. */
 export type ProfileRole = "barber" | "client";
 
 export type SubscriptionStatus = "trial" | "active" | "expired" | "canceled";

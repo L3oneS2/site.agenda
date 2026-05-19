@@ -61,14 +61,19 @@ export function ReportsDashboard({ barberUserId }: { barberUserId: string }) {
   const [loading, setLoading] = useState(true);
   const [pending, startTransition] = useTransition();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeWarnedRef = useRef(false);
 
   useEffect(() => {
-    void getReportBarberOptions().then((r) => {
-      if (r.barbers?.length) setBarberOptions(r.barbers);
-    });
+    void getReportBarberOptions()
+      .then((r) => {
+        if (r.barbers?.length) setBarberOptions(r.barbers);
+      })
+      .catch(() => {
+        toast.error("Não foi possível carregar opções de barbeiro.");
+      });
   }, []);
 
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async (isStale?: () => boolean) => {
     setLoading(true);
     try {
       const r = await getBarberReport({
@@ -77,29 +82,45 @@ export function ReportsDashboard({ barberUserId }: { barberUserId: string }) {
         customTo: preset === "custom" ? customTo : undefined,
         barberId: barberFilter,
       });
+      if (isStale?.()) return;
       if (r.error) {
         toast.error(r.error);
         setSummary(null);
         return;
       }
       setSummary(r.summary ?? null);
+    } catch {
+      if (!isStale?.()) {
+        toast.error("Não foi possível carregar o relatório.");
+        setSummary(null);
+      }
     } finally {
-      setLoading(false);
+      if (!isStale?.()) setLoading(false);
     }
   }, [preset, customFrom, customTo, barberFilter]);
 
   useEffect(() => {
+    let stale = false;
     if (preset === "custom" && (!customFrom || !customTo)) {
       setLoading(false);
       setSummary(null);
       return;
     }
-    void loadReport();
+    void loadReport(() => stale);
+    return () => {
+      stale = true;
+    };
   }, [loadReport, preset, customFrom, customTo]);
 
   useEffect(() => {
     const supabase = createBrowserSupabase();
-    if (!supabase) return;
+    if (!supabase) {
+      if (!realtimeWarnedRef.current) {
+        realtimeWarnedRef.current = true;
+        toast.message("Tempo real indisponível. Atualize a página para ver mudanças.");
+      }
+      return;
+    }
 
     const scheduleReload = () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);

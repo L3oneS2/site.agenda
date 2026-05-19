@@ -4,7 +4,18 @@ export type AppDebugArea = "auth" | "booking" | "bootstrap" | "agenda";
 /**
  * Uma linha JSON para logs operacionais (grep / agregadores). Evite colocar PII em `fields`.
  */
+function shouldEmitJsonLine(fields: Record<string, unknown>): boolean {
+  if (process.env.NODE_ENV === "development" || process.env.DEBUG_APP === "1") {
+    return true;
+  }
+  const where = typeof fields.where === "string" ? fields.where : "";
+  return where.startsWith("cron.") || where.startsWith("stripe.webhook");
+}
+
 export function logJsonLine(fields: Record<string, unknown>): void {
+  if (!shouldEmitJsonLine(fields)) {
+    return;
+  }
   // eslint-disable-next-line no-console
   console.error(JSON.stringify({ t: new Date().toISOString(), ...fields }));
 }
@@ -13,7 +24,9 @@ export function logJsonLine(fields: Record<string, unknown>): void {
  * Log JSON único no servidor ou Edge (sem PII). Use para falhas de configuração em middleware.
  */
 export function logGatewayError(where: string, message: string): void {
-  logJsonLine({ where, message });
+  // Falhas de configuração no Edge: sempre registrar (sem PII).
+  // eslint-disable-next-line no-console
+  console.error(JSON.stringify({ t: new Date().toISOString(), where, message }));
 }
 
 /**

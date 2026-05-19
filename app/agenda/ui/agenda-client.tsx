@@ -126,6 +126,8 @@ export function MarkAppointmentNoShowButton({
             toast.success("Marcado como não compareceu");
             dispatchAgendaChanged(router);
           }
+        } catch {
+          toast.error("Não foi possível atualizar o agendamento.");
         } finally {
           setLoading(false);
         }

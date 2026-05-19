@@ -1,4 +1,9 @@
-import { addDaysYmd, todayYmdInReportTz } from "@/lib/reports/timezone";
+import {
+  addDaysYmd,
+  parseYmd,
+  todayYmdInReportTz,
+  weekdayIndexInReportTz,
+} from "@/lib/reports/timezone";
 
 export type ReportPeriodPreset =
   | "today"
@@ -21,15 +26,9 @@ function pad2(n: number): string {
 
 /** Segunda-feira da semana civil que contém `ymd` (ISO semana iniciando segunda). */
 export function startOfWeekMondayYmd(ymd: string): string {
-  const { y, m, d } = (() => {
-    const [yy, mm, dd] = ymd.split("-").map(Number);
-    return { y: yy!, m: (mm ?? 1) - 1, d: dd! };
-  })();
-  const dt = new Date(Date.UTC(y, m, d, 12, 0, 0));
-  const dow = dt.getUTCDay();
-  const diff = dow === 0 ? -6 : 1 - dow;
-  dt.setUTCDate(dt.getUTCDate() + diff);
-  return dt.toISOString().slice(0, 10);
+  const wd = weekdayIndexInReportTz(ymd);
+  const diff = wd === 0 ? -6 : 1 - wd;
+  return addDaysYmd(ymd, diff);
 }
 
 export function startOfMonthYmd(ymd: string): string {
@@ -38,10 +37,7 @@ export function startOfMonthYmd(ymd: string): string {
 }
 
 export function endOfMonthYmd(ymd: string): string {
-  const { y, m } = (() => {
-    const [yy, mm] = ymd.split("-").map(Number);
-    return { y: yy!, m: (mm ?? 1) - 1 };
-  })();
+  const { y, m } = parseYmd(ymd);
   const last = new Date(Date.UTC(y, m + 1, 0, 12, 0, 0)).getUTCDate();
   return `${y}-${pad2(m + 1)}-${pad2(last)}`;
 }

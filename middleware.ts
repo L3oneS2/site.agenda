@@ -14,8 +14,21 @@ const protectedPrefixes = [
 
 const barberRestrictedPrefixes = ["/dashboard", "/agenda", "/relatorios"];
 
+/** Rotas do painel barbeiro (inclui billing/suporte): exige `profiles.role = barber`. */
+const barberRolePrefixes = [
+  "/dashboard",
+  "/agenda",
+  "/relatorios",
+  "/assinatura",
+  "/suporte",
+];
+
 function isRestrictedBarberRoute(pathname: string): boolean {
   return barberRestrictedPrefixes.some((p) => pathname.startsWith(p));
+}
+
+function requiresBarberRole(pathname: string): boolean {
+  return barberRolePrefixes.some((p) => pathname.startsWith(p));
 }
 
 export async function middleware(request: NextRequest) {
@@ -87,7 +100,7 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   }
 
-  if (user && isRestrictedBarberRoute(pathname)) {
+  if (user && requiresBarberRole(pathname)) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -100,7 +113,9 @@ export async function middleware(request: NextRequest) {
       home.search = "";
       return NextResponse.redirect(home);
     }
+  }
 
+  if (user && isRestrictedBarberRoute(pathname)) {
     const billingOrSupport =
       pathname.startsWith("/assinatura") || pathname.startsWith("/suporte");
     const shopPromise = supabase

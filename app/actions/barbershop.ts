@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { finalizeBarberBootstrap } from "@/app/actions/bootstrap-barber";
+import { requireBarber } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { barberWriteDeniedMessage } from "@/lib/barber-write-guard";
 
@@ -15,14 +16,8 @@ export async function saveBarbershopForCurrentUser(
     return { error: "Informe o nome da barbearia." };
   }
 
+  const { user } = await requireBarber();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { error: "Faça login para cadastrar a barbearia." };
-  }
 
   const { data: subRow } = await supabase
     .from("subscriptions")

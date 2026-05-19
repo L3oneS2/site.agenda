@@ -24,4 +24,11 @@ describe("resolveReportDateRange", () => {
     expect(prev.from).toBe("2026-05-16");
     expect(prev.to).toBe("2026-05-16");
   });
+
+  it("semana começa na segunda no fuso de relatórios", () => {
+    const sunday = new Date("2026-05-17T15:00:00.000Z");
+    const r = resolveReportDateRange("week", undefined, undefined, sunday);
+    expect(r.range?.from).toBe("2026-05-11");
+    expect(r.range?.to).toBe("2026-05-17");
+  });
 });

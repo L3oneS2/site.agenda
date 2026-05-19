@@ -8,7 +8,7 @@ import { logClientDebug, logJsonLine } from "@/lib/supabase/debug-env";
 import { Button } from "@/components/ui/button";
 import { timeStrToMinutes } from "@/lib/scheduling";
 import { formatarDataBR } from "@/lib/formatar-data-br";
-import { APPOINTMENT_STATUS } from "@/lib/appointments/status";
+import { APPOINTMENT_STATUS, appointmentStatusLabel } from "@/lib/appointments/status";
 import type { Appointment } from "@/lib/types";
 
 const DAY_START_MIN = 7 * 60;
@@ -51,6 +51,7 @@ export function DayTimeline({
   const [loading, setLoading] = useState(false);
   const [fetchHint, setFetchHint] = useState<string | null>(null);
   const isFirstEffect = useRef(true);
+  const remoteLoadAbortRef = useRef<AbortController | null>(null);
 
   const loadDay = useCallback(async (signal: AbortSignal) => {
     setLoading(true);
@@ -114,11 +115,14 @@ export function DayTimeline({
 
   useEffect(() => {
     const onRemoteAppointments = () => {
+      remoteLoadAbortRef.current?.abort();
       const ac = new AbortController();
+      remoteLoadAbortRef.current = ac;
       void loadDay(ac.signal);
     };
     window.addEventListener("agenda:appointments-changed", onRemoteAppointments);
     return () => {
+      remoteLoadAbortRef.current?.abort();
       window.removeEventListener("agenda:appointments-changed", onRemoteAppointments);
     };
   }, [loadDay]);
@@ -240,7 +244,7 @@ export function DayTimeline({
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-1">
                   <span className="inline-block rounded bg-black/10 px-1.5 py-0.5 text-[10px] font-medium text-gold-800 dark:bg-white/15 dark:text-gold-200">
-                    confirmado
+                    {appointmentStatusLabel(a.status)}
                   </span>
                   {a.status === APPOINTMENT_STATUS.SCHEDULED ? (
                     <AppointmentGraceActions

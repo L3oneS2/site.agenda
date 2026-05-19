@@ -5,6 +5,7 @@
  * Disponibilidade por data explícita (`agenda_day_slots`).
  */
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   tryCreateAdminClient,
@@ -21,9 +22,13 @@ import {
   timeStrToMinutes,
 } from "@/lib/scheduling";
 import { APPOINTMENT_STATUS } from "@/lib/appointments/status";
-import { mapServiceRows } from "@/lib/map-service-row";
-import type { AgendaDayMarker, Service } from "@/lib/types";
+import type { AgendaDayMarker } from "@/lib/types";
 import { appointmentPublicUrl } from "@/lib/public-app-url";
+import {
+  bookingRateExceeded,
+  recordBookingRateEvent,
+} from "@/lib/booking-rate-limit";
+import { requestClientIp } from "@/lib/request-client-ip";
 
 const ADMIN_MISSING =
   "Agendamento indisponível no servidor: configure SUPABASE_SERVICE_ROLE_KEY (ex.: na Vercel) e faça redeploy.";
@@ -46,13 +51,6 @@ function isBookingConflictInsertError(insError: {
     msg.includes("duplicate key") ||
     msg.includes("idx_appointments_unique_barber_date_start_scheduled")
   );
-}
-
-function addDaysISO(iso: string, days: number): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1, 12, 0, 0));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
 }
 
 function pad2(n: number): string {
@@ -92,44 +90,6 @@ function validatePublicBookingPayload(input: {
     return "Informe um telefone válido (8 a 15 dígitos).";
   }
   return null;
-}
-
-export async function getPublicServices(
-  barbershopId: string
-): Promise<{ services?: Service[]; error?: string }> {
-  const admin = tryCreateAdminClient();
-  const anon = tryCreateAnonReadOnlyClient();
-  const read = admin ? publicReadClient(anon, admin) : anon;
-  if (!read) {
-    bookingAdminMissing("getPublicServices");
-    return { error: ADMIN_MISSING };
-  }
-
-  if (!UUID_RE.test(barbershopId)) {
-    return { error: "Identificador da barbearia inválido." };
-  }
-
-  const { data: shop, error: shopError } = await read
-    .from("barbershops")
-    .select("user_id")
-    .eq("id", barbershopId)
-    .single();
-
-  if (shopError || !shop) {
-    return { error: "Barbearia não encontrada." };
-  }
-
-  const barberId = shop.user_id as string;
-
-  const { data, error } = await read
-    .from("services")
-    .select("id, user_id, nome, preco, duracao_minutos, created_at, updated_at")
-    .eq("user_id", barberId)
-    .order("nome");
-
-  if (error) return { error: error.message };
-
-  return { services: mapServiceRows(data as unknown[] | null) };
 }
 
 /**
@@ -310,106 +270,6 @@ export async function getPublicMonthDayMarkers(
   return { markers };
 }
 
-export async function getDatesWithAvailability(
-  barbershopId: string,
-  durationMinutes: number,
-  fromISO: string,
-  horizonDays: number
-): Promise<{ dates?: string[]; error?: string }> {
-  if (horizonDays < 1 || horizonDays > 60) {
-    return { error: "Horizonte de dias inválido." };
-  }
-
-  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
-    return { error: "Duração inválida." };
-  }
-
-  if (!UUID_RE.test(barbershopId)) {
-    return { error: "Identificador da barbearia inválido." };
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(fromISO)) {
-    return { error: "Data inicial inválida." };
-  }
-
-  const admin = tryCreateAdminClient();
-  if (!admin) {
-    bookingAdminMissing("getDatesWithAvailability");
-    return { error: ADMIN_MISSING };
-  }
-
-  const anon = tryCreateAnonReadOnlyClient();
-  const read = publicReadClient(anon, admin);
-
-  const { data: shop, error: shopError } = await read
-    .from("barbershops")
-    .select("user_id")
-    .eq("id", barbershopId)
-    .single();
-
-  if (shopError || !shop) {
-    return { error: "Barbearia não encontrada." };
-  }
-
-  const barberId = shop.user_id as string;
-  const endISO = addDaysISO(fromISO, horizonDays - 1);
-
-  const [{ data: slotRows, error: slotErr }, { data: appointments, error: apError }] =
-    await Promise.all([
-      read
-        .from("agenda_day_slots")
-        .select("data, hora")
-        .eq("user_id", barberId)
-        .gte("data", fromISO)
-        .lte("data", endISO),
-      admin
-        .from("appointments")
-        .select("data, hora_inicio, hora_fim")
-        .eq("barber_id", barberId)
-        .eq("status", APPOINTMENT_STATUS.SCHEDULED)
-        .gte("data", fromISO)
-        .lte("data", endISO),
-    ]);
-
-  if (slotErr) return { error: slotErr.message };
-  if (apError) return { error: apError.message };
-
-  const slotsByDate = new Map<string, string[]>();
-  for (const row of slotRows ?? []) {
-    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
-    const h = normalizeTimeInput(String((row as { hora: string }).hora));
-    const list = slotsByDate.get(d);
-    if (list) list.push(h);
-    else slotsByDate.set(d, [h]);
-  }
-
-  const byDate = new Map<string, { hora_inicio: string; hora_fim: string }[]>();
-  for (const row of appointments ?? []) {
-    const d = normalizeIsoDateFromDb((row as { data: unknown }).data);
-    const list = byDate.get(d);
-    const slice = {
-      hora_inicio: String((row as { hora_inicio: string }).hora_inicio),
-      hora_fim: String((row as { hora_fim: string }).hora_fim),
-    };
-    if (list) list.push(slice);
-    else byDate.set(d, [slice]);
-  }
-
-  const dates: string[] = [];
-
-  for (let i = 0; i < horizonDays; i++) {
-    const date = addDaysISO(fromISO, i);
-    const starts = slotsByDate.get(date) ?? [];
-    if (starts.length === 0) continue;
-    const intervals = bookedRowsToIntervals(byDate.get(date) ?? []);
-    const { free } = discreteSlotsFreeAndBlocked(starts, intervals, durationMinutes);
-    if (free.length > 0) {
-      dates.push(date);
-    }
-  }
-
-  return { dates };
-}
-
 export async function bookPublicAppointment(formData: FormData) {
   try {
     const barbershop_id = String(formData.get("barbershop_id") ?? "");
@@ -455,6 +315,15 @@ export async function bookPublicAppointment(formData: FormData) {
     if (!admin) {
       bookingAdminMissing("bookPublicAppointment");
       return { error: ADMIN_MISSING };
+    }
+
+    const h = await headers();
+    const clientIp = requestClientIp(h);
+    if (await bookingRateExceeded(admin, clientIp, barbershop_id)) {
+      return {
+        error:
+          "Muitas tentativas de reserva a partir desta rede. Aguarde um pouco e tente novamente.",
+      };
     }
 
     const anon = tryCreateAnonReadOnlyClient();
@@ -618,6 +487,8 @@ export async function bookPublicAppointment(formData: FormData) {
     const token = insertedRow.access_token;
     const appointmentUrl = appointmentPublicUrl(token);
     const appointmentPath = `/agendamento/${token}`;
+
+    await recordBookingRateEvent(admin, clientIp, barbershop_id);
 
     revalidatePath(`/barbearia/${barbershop_id}`);
     return {

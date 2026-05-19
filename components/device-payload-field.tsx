@@ -7,6 +7,8 @@ type Props = {
   onReadyChange?: (ready: boolean) => void;
 };
 
+const MAX_DEVICE_PAYLOAD_BYTES = 2048;
+
 /** Sinais estáveis do browser; o hash seguro com pepper ocorre apenas no servidor. */
 export function DevicePayloadField({ onReadyChange }: Props) {
   const [json, setJson] = useState("");
@@ -33,6 +35,10 @@ export function DevicePayloadField({ onReadyChange }: Props) {
       lang: navigator.language,
       platform: navigator.userAgent.slice(0, 256),
     });
+    if (payload.length > MAX_DEVICE_PAYLOAD_BYTES) {
+      readyCb.current?.(false);
+      return;
+    }
     setJson(payload);
     readyCb.current?.(true);
   }, []);

@@ -69,71 +69,84 @@ export async function POST(request: Request) {
     );
   }
 
-  const stripe = getStripe();
+  let stripe;
+  try {
+    stripe = getStripe();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Stripe indisponível.";
+    logJsonLine({ where: "api.create-checkout", phase: "stripe_init", message });
+    return NextResponse.json({ ok: false, error: message }, { status: 503 });
+  }
 
-  const { data: row } = await admin
-    .from("subscriptions")
-    .select("stripe_customer_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  let customerId = row?.stripe_customer_id as string | null | undefined;
-
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: user.email,
-      metadata: { supabase_user_id: user.id },
-    });
-    customerId = customer.id;
-    const { data: existingSub, error: selectErr } = await admin
+  try {
+    const { data: row } = await admin
       .from("subscriptions")
-      .select("user_id")
+      .select("stripe_customer_id")
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (selectErr) {
-      return NextResponse.json({ ok: false, error: selectErr.message }, { status: 500 });
-    }
+    let customerId = row?.stripe_customer_id as string | null | undefined;
 
-    if (existingSub) {
-      const { error: updErr } = await admin
-        .from("subscriptions")
-        .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
-        .eq("user_id", user.id);
-      if (updErr) {
-        return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
-      }
-    } else {
-      const { error: insErr } = await admin.from("subscriptions").insert({
-        user_id: user.id,
-        stripe_customer_id: customerId,
-        status: "expired",
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: user.email,
+        metadata: { supabase_user_id: user.id },
       });
-      if (insErr) {
-        return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
+      customerId = customer.id;
+      const { data: existingSub, error: selectErr } = await admin
+        .from("subscriptions")
+        .select("user_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (selectErr) {
+        return NextResponse.json({ ok: false, error: selectErr.message }, { status: 500 });
+      }
+
+      if (existingSub) {
+        const { error: updErr } = await admin
+          .from("subscriptions")
+          .update({ stripe_customer_id: customerId, updated_at: new Date().toISOString() })
+          .eq("user_id", user.id);
+        if (updErr) {
+          return NextResponse.json({ ok: false, error: updErr.message }, { status: 500 });
+        }
+      } else {
+        const { error: insErr } = await admin.from("subscriptions").insert({
+          user_id: user.id,
+          stripe_customer_id: customerId,
+          status: "expired",
+        });
+        if (insErr) {
+          return NextResponse.json({ ok: false, error: insErr.message }, { status: 500 });
+        }
       }
     }
-  }
 
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: "subscription",
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${origin}/sucesso?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}/erro`,
-    client_reference_id: user.id,
-    metadata: { supabase_user_id: user.id },
-    subscription_data: {
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      mode: "subscription",
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${origin}/sucesso?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/erro`,
+      client_reference_id: user.id,
       metadata: { supabase_user_id: user.id },
-    },
-  });
+      subscription_data: {
+        metadata: { supabase_user_id: user.id },
+      },
+    });
 
-  if (!session.url) {
-    return NextResponse.json(
-      { ok: false, error: "Falha ao criar sessão de checkout." },
-      { status: 500 }
-    );
+    if (!session.url) {
+      return NextResponse.json(
+        { ok: false, error: "Falha ao criar sessão de checkout." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, url: session.url });
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Falha ao criar checkout.";
+    logJsonLine({ where: "api.create-checkout", phase: "stripe_api", message });
+    return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
-
-  return NextResponse.json({ ok: true, url: session.url });
 }

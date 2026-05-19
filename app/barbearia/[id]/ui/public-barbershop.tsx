@@ -11,9 +11,11 @@ type Tab = "servicos" | "agendar";
 export function PublicBarbershop({
   barbershop,
   services,
+  initialTodayYmd,
 }: {
   barbershop: Barbershop;
   services: Service[];
+  initialTodayYmd: string;
 }) {
   const [tab, setTab] = useState<Tab>("servicos");
 
@@ -64,7 +66,11 @@ export function PublicBarbershop({
         {tab === "servicos" ? (
           <ServicesGrid services={services} onBook={() => setTab("agendar")} />
         ) : (
-          <BookingWizard barbershopId={barbershop.id} services={services} />
+          <BookingWizard
+            barbershopId={barbershop.id}
+            services={services}
+            initialTodayYmd={initialTodayYmd}
+          />
         )}
       </motion.div>
     </div>
