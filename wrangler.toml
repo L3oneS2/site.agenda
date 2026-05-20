@@ -8,13 +8,6 @@ compatibility_flags = ["nodejs_compat"]
 
 main = ".open-next/worker.js"
 
-# NEXT_PUBLIC_* e price id: disponíveis no Worker e durante `wrangler`/`opennextjs-cloudflare` (build incluso).
-[vars]
-NEXT_PUBLIC_SUPABASE_URL = "${NEXT_PUBLIC_SUPABASE_URL}"
-NEXT_PUBLIC_SUPABASE_ANON_KEY = "${NEXT_PUBLIC_SUPABASE_ANON_KEY}"
-NEXT_PUBLIC_APP_URL = "${NEXT_PUBLIC_APP_URL}"
-STRIPE_PRICE_ID = "${STRIPE_PRICE_ID}"
-
 [assets]
 directory = ".open-next/assets"
 binding = "ASSETS"

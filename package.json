@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && npx @opennextjs/cloudflare build --skipNextBuild",
+    "build": "node scripts/build-production.mjs",
+    "build:next-only": "next build && npx @opennextjs/cloudflare build --skipNextBuild",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
     "deploy": "npm run build && opennextjs-cloudflare deploy",
     "start": "next start",

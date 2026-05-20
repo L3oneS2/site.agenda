@@ -2,6 +2,20 @@
 
 Checklist para deploy e suporte. Detalhes de produto estão em `app/actions/README.md`.
 
+## Crítico — antes de cada deploy
+
+### C-01: build sem server secrets no disco
+
+- `npm run build` usa `scripts/build-production.mjs`: afasta `.env.local` se contiver secrets e varre `.open-next/` por padrões (`sk_live_`, `whsec_`, etc.).
+- Para build/deploy local, use `.env.production.local` (copie de `.env.production.local.example`) **só** com `NEXT_PUBLIC_*` e `STRIPE_PRICE_ID`.
+- **Server secrets** (`SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, `TRIAL_IDENTITY_PEPPER`) → apenas **Secrets** no painel Cloudflare, nunca no ficheiro usado no build.
+- Se já fez deploy com `.env.local` completo: o bundle antigo pode ter secrets em `.open-next/cloudflare/next-env.mjs` — rode `npm run build` de novo e **roteie** chaves Stripe/Supabase service role + `CRON_SECRET`.
+
+### C-02: migration de segurança no Supabase
+
+1. Aplicar `database/migrations/20260520_security_rls_public_access.sql` (SQL Editor ou `supabase db push`).
+2. Validar com `database/scripts/verify_20260520_security.sql` — todas as mensagens devem ser `OK`.
+
 ## Variáveis de ambiente (produção)
 
 | Variável | Uso |
@@ -20,9 +34,9 @@ Checklist para deploy e suporte. Detalhes de produto estão em `app/actions/READ
 
 Este projeto **não** é SPA estático: precisa do Worker (`.open-next/worker.js`).
 
-1. **Workers Builds** (recomendado) ou CI: `npm run build` e deploy `npm run deploy` (ver `package.json`).
-2. Definir **secrets** só no painel Cloudflare (encrypted): `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, `TRIAL_IDENTITY_PEPPER`. **Não** colocar esses valores em `.env.local` durante o build de produção — o OpenNext pode embutir envs do build em `.open-next/` e vazar no bundle do Worker.
-3. `wrangler.toml` / `[vars]`: apenas `NEXT_PUBLIC_*` e `STRIPE_PRICE_ID` (não-secret).
+1. **Workers Builds** (recomendado) ou CI: `npm run build` e deploy `npm run deploy` (ver `package.json`). Em CI, não injetar server secrets nas envs do passo de build.
+2. Definir **secrets** só no painel Cloudflare (encrypted): `SUPABASE_SERVICE_ROLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, `TRIAL_IDENTITY_PEPPER`.
+3. Variáveis **plaintext** no painel: `NEXT_PUBLIC_*`, `NEXT_PUBLIC_APP_URL`, `STRIPE_PRICE_ID`. O `wrangler.toml` não define `[vars]` — evita sobrescrever o painel no deploy.
 4. `CRON_SECRET`: mínimo 32 caracteres aleatórios; rotacionar se já houve deploy com valor fraco.
 5. Domínio: defina `NEXT_PUBLIC_APP_URL` com o URL público (ex. `https://corte-pro.<subdomínio>.workers.dev` ou domínio próprio). `corte-pro` deve coincidir com `name` em `wrangler.toml`.
 6. **Cron (Cloudflare):** o `vercel.json` não aplica em Workers. No painel Cloudflare → Workers → Triggers → Cron, configure chamadas HTTP (ou use Workers Cron + roteamento) para:
